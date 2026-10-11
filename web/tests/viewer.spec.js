@@ -159,6 +159,22 @@ test('rigged imports report their bones and can show the skeleton', async ({ pag
   expect(errors).toEqual([]);
 });
 
+test('bundled Rigged Figure loads with its skin, skeleton and animation', async ({ page }) => {
+  const errors = await open(page);
+  await page.getByRole('button', { name: 'Rigged figure', exact: false }).click();
+  await expect(page.locator('#model-name')).toHaveText('Rigged Figure');
+  await expect(page.locator('#scene-stats')).toContainText('19 bones');
+  await expect(page.locator('#skeleton')).toBeEnabled();
+  await page.locator('#skeleton').check();
+  await expect(page.locator('#animation-controls')).toBeVisible();
+  await page.getByRole('button', { name: 'Play animation' }).click();
+  await expect(page.getByRole('button', { name: 'Pause animation' })).toBeVisible();
+  await expect.poll(async () => (await pixels(page)).colors).toBeGreaterThan(20);
+  await page.getByRole('button', { name: 'Studio demo', exact: false }).click();
+  await expect(page.locator('#scene-stats')).toContainText('4 meshes');
+  expect(errors).toEqual([]);
+});
+
 test('GLB files load without a companion file', async ({ page }) => {
   const errors = await open(page);
   const { model, buffer } = fixture();

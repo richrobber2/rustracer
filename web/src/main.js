@@ -372,6 +372,30 @@ async function init() {
     event.preventDefault(); dragDepth = 0; $('viewport').classList.remove('dragging');
     await loadFiles([...event.dataTransfer.files]);
   });
+  // Centres a loaded glTF on the ground, scales it to the studio and makes it the current model.
+  function showGltf(gltf, name) {
+    const box = new THREE.Box3().setFromObject(gltf.scene);
+    if (box.isEmpty()) { release(gltf.scene); throw new Error('This model has no visible geometry.'); }
+    const size = box.getSize(new THREE.Vector3()); const center = box.getCenter(new THREE.Vector3());
+    const factor = 3 / Math.max(size.x, size.y, size.z);
+    const group = new THREE.Group();
+    gltf.scene.position.sub(new THREE.Vector3(center.x, box.min.y, center.z));
+    group.add(gltf.scene); group.scale.setScalar(factor);
+    replaceModel(group, name, gltf.animations);
+  }
+  // The Khronos "Rigged Figure" sample ships with the studio: a skinned, animated human figure.
+  $('figure').onclick = async () => {
+    const serial = ++importSerial;
+    notify('Opening Rigged Figure…', false, true);
+    try {
+      const gltf = await new GLTFLoader().loadAsync(new URL('models/RiggedFigure/RiggedFigure.glb', document.baseURI).href);
+      if (serial !== importSerial) { release(gltf.scene); return; }
+      showGltf(gltf, 'Rigged Figure');
+      notify('Rigged Figure © 2017 Cesium, CC BY 4.0. Play its animation or show its skeleton under Model & materials.');
+    } catch (error) {
+      if (serial === importSerial) notify(`Could not open Rigged Figure: ${error.message}`, true);
+    }
+  };
   async function loadFiles(files) {
     if (!files.length) return;
     const serial = ++importSerial;
@@ -407,14 +431,7 @@ async function init() {
       const data = await root.arrayBuffer();
       const gltf = await new Promise((resolve, reject) => loader.parse(data, `/local-model/${base}`, resolve, reject));
       if (serial !== importSerial) { release(gltf.scene); return; }
-      const box = new THREE.Box3().setFromObject(gltf.scene);
-      if (box.isEmpty()) { release(gltf.scene); throw new Error('This model has no visible geometry.'); }
-      const size = box.getSize(new THREE.Vector3()); const center = box.getCenter(new THREE.Vector3());
-      const factor = 3 / Math.max(size.x, size.y, size.z);
-      const group = new THREE.Group();
-      gltf.scene.position.sub(new THREE.Vector3(center.x, box.min.y, center.z));
-      group.add(gltf.scene); group.scale.setScalar(factor);
-      replaceModel(group, root.name, gltf.animations);
+      showGltf(gltf, root.name);
       notify(`${root.name} is ready. All files were loaded locally.`);
     } catch (error) {
       if (serial === importSerial) notify(`Could not open model: ${error.message}`, true);
