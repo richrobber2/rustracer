@@ -1,6 +1,6 @@
 // Region and bridge approximations for the supplied, fixed-pose adult cages.
 // +Z faces forward; +X appears on the left when viewed from behind.
-export function isSideRegion(region) { return region === 2 || region === 3 || region === 4 || region >= 9; }
+export function isSideRegion(region) { return region === 2 || region === 3 || region === 4 || (region >= 9 && region <= 15); }
 // Cage samples on the centre line belong to neither side: 0, otherwise ±1.
 export const sideOf = x => Math.abs(x) < 1e-6 ? 0 : Math.sign(x);
 

@@ -5,6 +5,8 @@ export function isolateButtockWeights(geometry, system) {
   const { position, _cage_index: ids, _cage_weight: weights } = geometry.attributes;
   let changed = 0;
   for (let v = 0; v < position.count; v++) {
+    // The central anal surface is one circular region, not a paired buttock.
+    if (geometry.attributes._anal_weight?.getX(v) > 0) continue;
     const j = v * 3, at = v * 4, x = position.array[j];
     if (Math.abs(x) < 1e-6) continue;
     let posteriorRegion = -1;

@@ -27,6 +27,7 @@
         <fieldset id="creator-fields" disabled><label class="select-label" for="shape-buttSide">Muscle / fat edits · as seen from the rear<select id="shape-buttSide"><option value="Left" selected>Rear-view left</option><option value="Right">Rear-view right</option><option value="Both">Both sides · overwrite both</option></select></label><div id="proportion-controls"></div>
         <p class="hint">Values are relative to the base body. Editing proportions resets tissue to its new resting shape.</p>
         <div class="preset-row"><button id="proportions-reset">Reset shape</button><button id="proportions-random">Randomize</button><button id="focus-pelvis">Focus pelvis</button><button id="focus-buttocks">Rear view</button></div>
+        <button id="focus-anal" class="wide quiet">Anal view & physics</button>
         <button id="focus-upper" class="wide quiet">Upper-back view</button>
         <button id="focus-abs" class="wide quiet">Abs view & physics</button>
         <p class="hint">Muscle bulk and fat padding edit the selected side independently. Both sides overwrites both values. They are separate shape and support approximations, relative to this base. Internal tissue layers and mass are not measured.</p>
@@ -89,13 +90,17 @@
           <label class="slider-label" for="tissue-genitalCompliance">Compliance <output id="tissue-genitalCompliance-value">1.0×</output></label><input id="tissue-genitalCompliance" type="range" min="0.5" max="2" step="0.05" value="1">
           <label class="slider-label" for="tissue-genitalDamping">Damping <output id="tissue-genitalDamping-value">50%</output></label><input id="tissue-genitalDamping" type="range" min="0" max="1" step="0.05" value="0.5">
           <p class="hint">External tissue with a supported attachment. Proportions also change its response and movement limit.</p></details>
+          <details class="genital-controls"><summary>Anal / perianal tissue response</summary>
+          <label class="slider-label" for="tissue-analCompliance">Compliance <output id="tissue-analCompliance-value">1.0×</output></label><input id="tissue-analCompliance" type="range" min="0.5" max="2" step="0.05" value="1">
+          <label class="slider-label" for="tissue-analDamping">Damping <output id="tissue-analDamping-value">65%</output></label><input id="tissue-analDamping" type="range" min="0" max="1" step="0.05" value="0.65">
+          <p class="hint">A recessed external anal surface with surrounding folds. The central region uses its own press/pull response and a 6 mm movement limit. Size and depth are under Create. This is a closed surface approximation without an internal canal or sphincter muscle model.</p></details>
           <section class="buttock-map-panel" aria-labelledby="buttock-map-title">
           <h3 id="buttock-map-title">2D displacement & grab points</h3>
-          <label class="select-label" for="tissue-mapRegion">Map region<select id="tissue-mapRegion"><option value="abs">Abs & obliques · front</option><option value="upper" selected>Upper back → shoulders → hands</option><option value="pelvis">Buttocks & lower back</option></select></label>
+          <label class="select-label" for="tissue-mapRegion">Map region<select id="tissue-mapRegion"><option value="abs">Abs & obliques · front</option><option value="upper" selected>Upper back → shoulders → hands</option><option value="pelvis">Buttocks & lower back</option><option value="anal">Anal / perianal surface</option></select></label>
           <canvas id="buttock-map" width="320" height="240" role="img" aria-label="Interactive rear projection of tissue samples; press or pull a dot to grab its current position"></canvas>
           <div class="map-legend"><span>0 mm</span><span>25 mm</span><span>50+ mm</span></div>
           <p id="buttock-map-status" class="hint" role="status">Choose a body to see tissue samples.</p>
-          <p class="hint">Press or pull a dot to grab that sample; drag it sideways or vertically. Orbit switches to Press when you grab the map. The white ring follows your grab anchor, and dim dots are outside the chosen region or side. Abs uses a front projection; back maps use a rear projection. Dots and framing follow the pose at 10 Hz. Color measures tissue deformation, excluding skeletal travel. Abs readings also report linked lower-back and pelvis deformation.</p>
+          <p class="hint">Press or pull a dot to grab that sample; drag it sideways or vertically. Orbit switches to Press when you grab the map. The white ring follows your grab anchor, and dim dots are outside the chosen region or side. Abs uses a front projection; back maps use a rear projection. The anal map unfolds the local surface plane. Dots and framing follow the pose at 10 Hz. Color measures tissue deformation, excluding skeletal travel. Abs readings also report linked lower-back and pelvis deformation.</p>
           </section>
           <label class="select-label" for="tissue-region">Region for touch, pulse & support<select id="tissue-region"><option value="-1">Whole body</option></select></label>
           <label class="select-label" for="tissue-rate">Surface lighting updates<select id="tissue-rate"><option value="15">Responsive · 15 Hz</option><option value="30" selected>Balanced · 30 Hz</option><option value="60">Detailed · 60 Hz</option></select></label><label class="select-label" for="tissue-view">Surface view<select id="tissue-view"><option value="skin">Skin</option><option value="clay">Clay</option><option value="heat">Displacement · blue 0 to red 50 mm</option><option value="wire">Wireframe</option></select></label>
@@ -103,7 +108,7 @@
           <button id="tissue-pause" class="wide quiet">Pause physics</button>
         </fieldset>
         <p id="tissue-status" class="tissue-status" role="status">Preparing body…</p>
-        <p class="hint">GLB downloads contain the base body. Use Export preset to save your proportions.</p><a id="body-download" class="asset-link" href="./bodies/female.glb" download="female-body.glb">Download female GLB</a>
+        <p class="hint">Source GLBs contain the original base body; the viewer adds the anal surface. Export preset saves your proportions and recreates that surface when imported.</p><a id="body-download" class="asset-link" href="./bodies/female.glb" download="female-body.glb">Download female GLB</a>
         <details class="tissue-notes"><summary>About this simulation</summary><p>Illustrative surface dynamics and muscle-actuator joint motion on adult anatomical meshes. Muscle groups and antagonists drive simplified angular dynamics, not measured anatomical muscle paths or full-body balance. Pelvis and legs stay supported; this is not a ragdoll. Muscle support changes stiffness and shape; muscles and fat are not separate anatomical layers. No tissue self-collision, internal anatomy, or calibrated biological properties. Use this for visual experiments, not medical predictions. Path tracing and Pause physics hold both joints and tissue.</p><p>Models and skin: MakeHuman / MPFB. External anatomy: MHX2. Asset credits and license details are included. <a href="./bodies/ATTRIBUTION.txt" target="_blank" rel="noopener">Credits</a></p></details>
       </section>
       <section id="studio-panel" class="control-section" data-panel="studio" role="tabpanel" aria-labelledby="tab-studio" hidden>

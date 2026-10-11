@@ -1,4 +1,5 @@
 // Smooth rest-shape edits for adult character proportions. No change of age.
+import { analField } from './anal-surface.js';
 export const PROPORTIONS = [
   { id: 'height', label: 'Height', min: .88, max: 1.16 },
   { id: 'shoulders', label: 'Shoulder breadth', min: .8, max: 1.25 },
@@ -10,6 +11,8 @@ export const PROPORTIONS = [
   { id: 'thighs', label: 'Thigh volume', min: .8, max: 1.3 },
   { id: 'genitalLength', label: 'Genital length', min: .65, max: 1.5 },
   { id: 'genitalWidth', label: 'Genital width', min: .65, max: 1.5 },
+  { id: 'analSize', label: 'Anal surface size', min: .75, max: 1.25 },
+  { id: 'analDepth', label: 'Anal recess depth', min: .5, max: 1.5 },
 ];
 export const DEFAULT_PROPORTIONS = { buttocks: 1, ...Object.fromEntries(PROPORTIONS.map(p => [p.id, 1])) };
 export function sanitizeProportions(value = {}) {
@@ -24,10 +27,12 @@ export function sanitizeProportions(value = {}) {
 }
 const bell = (x, center, width) => Math.exp(-(((x - center) / width) ** 2));
 export class BodyMorph {
-  constructor(positions, genitalWeights, data) {
+  constructor(positions, genitalWeights, data, analWeights = null) {
     this.base = new Float32Array(positions); this.result = this.base.slice();
     this.genital = new Float32Array(genitalWeights || positions.length / 3);
     this.anchor = data.genitalAnchor;
+    this.anal = analWeights;
+    this.analFrame = data.analFrame;
     this.fields = new Float32Array(this.base.length / 3 * 7);
     for (let i = 0; i < this.base.length / 3; i++) {
       const y = this.base[i * 3 + 1] / data.height, x = Math.abs(this.base[i * 3]) / data.height, at = i * 7;
@@ -51,9 +56,17 @@ export class BodyMorph {
       const muscle = p['gluteMuscle' + side] ?? p.gluteMuscle, fat = p['buttFat' + side] ?? p.buttFat;
       const breadth = 1 + (p.shoulders - 1) * f[k] + (p.chest - 1) * .35 * f[k + 1] + (p.waist - 1) * f[k + 2] + (p.hips - 1) * f[k + 3] + (p.thighs - 1) * .35 * f[k + 4];
       const depth = 1 + (p.chest - 1) * f[k + 1] + (p.waist - 1) * f[k + 2] + (p.hips - 1) * .45 * f[k + 3] + (p.thighs - 1) * f[k + 4];
-      o[j] = b[j] * breadth * (1 + (p.genitalWidth - 1) * g);
-      o[j + 1] = (b[j + 1] + (b[j + 1] - this.anchor[1]) * (p.genitalLength - 1) * g) * p.height;
-      o[j + 2] = (b[j + 2] + (b[j + 2] - this.anchor[2]) * (p.genitalWidth - 1) * g) * depth * (1 + (p.buttocks - 1) * f[k + 5]) * (1 + .65 * (muscle - 1) * f[k + 5] + .35 * (fat - 1) * f[k + 6]);
+      let x = b[j], y = b[j + 1], z = b[j + 2];
+      if (this.anal?.[i] && this.analFrame && (p.analSize !== 1 || p.analDepth !== 1)) {
+        const field = analField([x, y, z], this.analFrame), scale = (p.analSize - 1) * this.anal[i];
+        const shift = (p.analDepth - 1) * field.depth;
+        x += field.u * scale;
+        y += this.analFrame.tangent[1] * field.v * scale + this.analFrame.normal[1] * shift;
+        z += this.analFrame.tangent[2] * field.v * scale + this.analFrame.normal[2] * shift;
+      }
+      o[j] = x * breadth * (1 + (p.genitalWidth - 1) * g);
+      o[j + 1] = (y + (y - this.anchor[1]) * (p.genitalLength - 1) * g) * p.height;
+      o[j + 2] = (z + (z - this.anchor[2]) * (p.genitalWidth - 1) * g) * depth * (1 + (p.buttocks - 1) * f[k + 5]) * (1 + .65 * (muscle - 1) * f[k + 5] + .35 * (fat - 1) * f[k + 6]);
     }
     return o;
   }

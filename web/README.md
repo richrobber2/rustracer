@@ -209,3 +209,15 @@ CPU review (`node checks/muscle-performance.mjs`): Node 24.19.0, Linux x64; unil
 | Male | 0.706 / 0.902 ms | 1.752 / 2.392 ms |
 
 CPU review: Node 24.19.0, Linux x64; 60 Hz updates with two fixed 120 Hz substeps, zero gravity, unilateral vibration, 180 warmup updates and three runs of 600 measured updates per workload. For the same upper-back workload, mean solver time changed from 0.201 to 0.215 ms (female) and 0.257 to 0.266 ms (male). Abs vibration averaged 0.216 ms (female, p95 0.295 ms) and 0.280 ms (male, p95 0.425 ms). These exclude surface deformation, map drawing, browser and GPU and establish no device FPS.
+
+### External anal surface
+
+Both bodies now receive a procedural anal/perianal surface in the viewer. The shared MakeHuman UV landmark locates the posterior perineum. Two local, conforming edge-refinement passes preserve welded seams, skin texture coordinates and skeletal weights; a compact displacement profile creates a closed recess, rim and shallow radial folds. No detached overlay, internal canal, sphincter anatomy or biological calibration is supplied.
+
+Create exposes **Anal surface size** (75–125%) and **Anal recess depth** (50–150%), plus **Anal view & physics** for a close rear/underside camera and the corresponding interaction region. Shape edits rebuild both the skin and its local cage. Version-1 presets retain these controls; older presets use neutral values. The separate anal region is central, so it remains selectable regardless of the left/right selector used for paired body regions. Compliance and damping control its bounded surface response; its 6 mm movement limit is a prototype choice.
+
+The 2D anal map projects onto the local perineal tangent plane, with direct press/pull grabs, the existing displacement colors and current-pose coordinates. The added cage has 23 points per body and passive edge connections to surrounding pelvic/thigh tissue. The source GLB downloads remain the original assets; saved presets reconstruct the procedural surface on import.
+
+Offline geometry and rig checks verify closed edges with consistent winding, nondegenerate triangles, normalized weights, locality, reversible proportions, center grabs, map picking, bounded extreme response, release recovery and muscle-pose compatibility for both bodies. Actual DOM handlers are exercised for view selection, shape/response sliders and map capture/release. Browser/touch/GPU visual QA remains unavailable. Exact geometry projections were inspected independently of browser rendering.
+
+Cloud Node measurements: 1,824 added triangles for female and 2,700 for male (under 3% of each body); procedural preparation took about 117–142 ms. With 60 warmup and 180 measured 60 Hz updates, anal-region vibration plus selective surface updates and normals every other frame averaged 0.29/0.46 ms, p95 0.38/0.65 ms (female/male). These timings exclude rendering, loading/texture decoding and map drawing, and establish no phone frame rate.

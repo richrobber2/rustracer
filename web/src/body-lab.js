@@ -8,6 +8,7 @@ import { surfaceGrabAnchor } from './grab-points.js';
 import { MuscleMotion, CagePose, MUSCLE_GROUPS } from './muscle-motion.js';
 import { SurfaceDeformer } from './surface-deformer.js';
 import { BodyMorph, PROPORTIONS, DEFAULT_PROPORTIONS, sanitizeProportions, readCharacter } from './body-proportions.js';
+import { addAnalSurface } from './anal-surface.js';
 
 const $ = id => document.getElementById(id);
 const PRESETS = {
@@ -39,6 +40,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
   const buttockMap = new ButtockMap(mapCanvas, $('buttock-map-status'), $('tissue-mapRegion').value);
   const settings = ['stiffness', 'damping', 'gravity', 'tension', 'radius', 'strength', 'genitalCompliance', 'genitalDamping', 'buttCompliance', 'buttDamping', 'lumbarCoupling', 'lumbarSupport', 'lumbarDamping', 'upperCoupling', 'upperSupport', 'shoulderCoupling', 'shoulderSupport', 'handCoupling', 'handSupport'];
   settings.push('absSupport', 'obliqueSupport', 'absCoupling', 'coreCoupling', 'coreBracing', 'absDamping');
+  settings.push('analCompliance', 'analDamping');
   const parameterValues = () => ({ ...Object.fromEntries(settings.map(id => [id, Number($(`tissue-${id}`).value)])), buttSide: Number($('tissue-buttSide').value) });
   function setButtons() {
     $('tissue-pause').textContent = current?.system.paused ? 'Resume physics' : 'Pause physics';
@@ -185,6 +187,20 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
     controls.target.copy(p); camera.position.copy(p).add(direction); camera.lookAt(p); controls.update();
   }
   $('focus-pelvis').onclick = () => focusRegion(8);
+  $('focus-anal').onclick = () => {
+    if (!current) return;
+    endPointer(); if (pendingShape) applyShape();
+    const center = new THREE.Vector3(), a = current.system.rest; let count = 0;
+    for (let i = 0; i < current.system.count; i++) if (current.system.regions[i] === 16) {
+      center.add(new THREE.Vector3(...current.pose.point(i, Array.from(a.slice(i * 3, i * 3 + 3))))); count++;
+    }
+    if (!count) return;
+    center.multiplyScalar(1 / count); current.mesh.localToWorld(center);
+    const direction = new THREE.Vector3(...current.data.analFrame.normal).transformDirection(current.mesh.matrixWorld).multiplyScalar(.18 * shape.height * current.object.scale.x);
+    controls.target.copy(center); camera.position.copy(center).add(direction); camera.lookAt(center); controls.update();
+    current.system.configure({ region: 16 }); $('tissue-region').value = '16'; setMapMode('anal');
+    buttockMap.next = 0; setPanel('physics');
+  };
   $('focus-buttocks').onclick = () => focusRegion(9, true);
   $('focus-upper').onclick = () => focusRegion(11, true);
   $('focus-abs').onclick = () => {
@@ -232,13 +248,14 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
       const cageUrl = new URL(`./bodies/${sex}-cage.json?v=2`, document.baseURI).href;
       const responses = await Promise.all([fetch(cageUrl, { signal }), fetch(modelUrl, { signal })]);
       if (responses.some(r => !r.ok)) throw new Error('Body data could not load');
-      const [data, bytes] = await Promise.all([responses[0].json(), responses[1].arrayBuffer()]);
+      const [sourceData, bytes] = await Promise.all([responses[0].json(), responses[1].arrayBuffer()]);
       if (request !== serial) return;
       gltf = await new GLTFLoader().parseAsync(bytes, new URL('./bodies/', document.baseURI).href);
       if (request !== serial) { disposeObject(gltf.scene); return; }
       let mesh;
       gltf.scene.traverse(node => { if (node.geometry?.attributes._cage_index) mesh = node; });
       if (!mesh) throw new Error('This body has no tissue controls.');
+      const data = addAnalSurface(mesh.geometry, sourceData);
       endPointer(); requestRealtime();
       const system = new TissueSystem(data);
       system.configure(character?.tissue || parameterValues());
@@ -265,8 +282,8 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
       gltf.scene.traverse(node => { if (node.isMesh && node !== mesh) accessories.push({ mesh: node, morph: new BodyMorph(node.geometry.attributes.position.array, null, data) }); });
       current = { object: gltf.scene, mesh, system, data, sex, motion, pose, skinMap: mesh.material.map,
         deformer: new SurfaceDeformer(geometry, system.count),
-        morph: new BodyMorph(geometry.attributes.position.array, geometry.attributes._genital_weight.array, data),
-        cageMorph: new BodyMorph(data.positions, data.genitalWeights, data), accessories };
+        morph: new BodyMorph(geometry.attributes.position.array, geometry.attributes._genital_weight.array, data, geometry.attributes._anal_weight.array),
+        cageMorph: new BodyMorph(data.positions, data.genitalWeights, data, data.analWeights), accessories };
       applyShape();
       $('motion-side').value = String(motion.side); $('motion-demo').value = motion.demo;
       $('motion-strength').value = motion.strength; $('motion-speed').value = motion.speed;
@@ -281,7 +298,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
       setMapMode(mapModeForRegion(system.parameters.region, buttockMap.mode));
       for (const button of document.querySelectorAll('[data-body]')) button.setAttribute('aria-pressed', String(button.dataset.body === sex));
       $('body-download').href = modelUrl; $('body-download').download = `${sex}-body.glb`;
-      $('body-download').textContent = `Download base ${sex} GLB`;
+      $('body-download').textContent = `Download source ${sex} GLB`;
       $('tissue-mesh-info').textContent = `${Math.round(geometry.index.count / 3000)}k triangles · external anatomy included`;
       $('tissue-status').textContent = 'Ready · choose Press or Pull to touch the surface';
       setButtons(); setTool(tool); applyView();
@@ -299,7 +316,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
   for (const button of document.querySelectorAll('[data-body]')) button.onclick = () => load(button.dataset.body);
   for (const button of document.querySelectorAll('[data-tissue-tool]')) button.onclick = () => setTool(button.dataset.tissueTool);
   function formatParameter(id, value) {
-    return id === 'radius' ? `${Math.round(value * 100)} cm` : id === 'stiffness' ? String(value) : ['damping', 'tension', 'genitalDamping', 'buttDamping', 'lumbarCoupling', 'lumbarSupport', 'lumbarDamping', 'upperCoupling', 'upperSupport', 'shoulderCoupling', 'shoulderSupport', 'handCoupling', 'handSupport', 'absSupport', 'obliqueSupport', 'absCoupling', 'coreCoupling', 'coreBracing', 'absDamping'].includes(id) ? `${Math.round(value * 100)}%` : `${value.toFixed(1)}×`;
+    return id === 'radius' ? `${Math.round(value * 100)} cm` : id === 'stiffness' ? String(value) : ['damping', 'tension', 'genitalDamping', 'analDamping', 'buttDamping', 'lumbarCoupling', 'lumbarSupport', 'lumbarDamping', 'upperCoupling', 'upperSupport', 'shoulderCoupling', 'shoulderSupport', 'handCoupling', 'handSupport', 'absSupport', 'obliqueSupport', 'absCoupling', 'coreCoupling', 'coreBracing', 'absDamping'].includes(id) ? `${Math.round(value * 100)}%` : `${value.toFixed(1)}×`;
   }
   for (const id of settings) {
     $(`tissue-${id}`).oninput = () => {

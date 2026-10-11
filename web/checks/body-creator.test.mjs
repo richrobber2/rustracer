@@ -38,7 +38,8 @@ test('proportion edits retain neutral shape and are finite and reversible at eve
     const g = await geometry(sex), base = g.attributes.position.array.slice();
     const morph = new BodyMorph(base, g.attributes._genital_weight.array, data[sex]);
     assert.deepEqual(morph.apply(DEFAULT_PROPORTIONS), base);
-    for (const p of PROPORTIONS) for (const value of [p.min, p.max]) {
+    // Procedural anal controls are validated on their refined mesh in anal-surface.test.mjs.
+    for (const p of PROPORTIONS.filter(p => !p.id.startsWith('anal'))) for (const value of [p.min, p.max]) {
       const changed = morph.apply({ ...DEFAULT_PROPORTIONS, [p.id]: value }).slice();
       assert.ok(changed.every(Number.isFinite)); assert.notDeepEqual(changed, base);
       assert.deepEqual(morph.apply(DEFAULT_PROPORTIONS), base);

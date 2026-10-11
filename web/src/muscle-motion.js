@@ -53,7 +53,7 @@ export class MuscleMotion {
     this.strength = 1; this.speed = 1; this.side = 1; this.demo = 'reach';
     this.running = false; this.held = false; this.time = 0; this.accumulator = 0;
     this.rotation = new THREE.Quaternion(); this.version = 0;
-    this.regionActivation = new Float32Array(16 * 3);
+    this.regionActivation = new Float32Array(17 * 3);
   }
   selected(group, side = this.side) { return this.joints.filter(j => j.group === group && (!j.side || side === 2 || j.side === side)); }
   setExcitation(group, side, values) {

@@ -101,4 +101,20 @@ test('actual map controls capture a displaced sample, cancel, and release on pan
   elements.get('motion-hold').onclick(); const elbow = bodyObject.getObjectByName('lowerarm01R').quaternion.clone();
   lab.update(1 / 60, 6200); assert.deepEqual(bodyObject.getObjectByName('lowerarm01R').quaternion.toArray(), elbow.toArray());
   assert.equal(elements.get('motion-hold').textContent, 'Run muscles');
+  // Actual anal-view/shape/response handlers, not just the standalone map.
+  elements.get('focus-anal').onclick();
+  assert.equal(elements.get('tissue-region').value, '16');
+  assert.equal(elements.get('tissue-mapRegion').value, 'anal');
+  elements.get('shape-analSize').value = '1.25'; elements.get('shape-analSize').oninput();
+  elements.get('shape-analDepth').value = '1.5'; elements.get('shape-analDepth').oninput();
+  elements.get('tissue-analCompliance').value = '2'; elements.get('tissue-analCompliance').oninput();
+  elements.get('tissue-analDamping').value = '.9'; elements.get('tissue-analDamping').oninput();
+  elements.get('tissue-mapRegion').onchange(); lab.update(1 / 60, 7000);
+  assert.equal(elements.get('shape-analSize-value').value, '125%');
+  assert.equal(elements.get('tissue-analDamping-value').value, '90%');
+  assert.match(elements.get('buttock-map-status').textContent, /anal tissue/);
+  assert.ok(dots.length > 0 && dots.length <= 25);
+  mapCanvas.emit('pointerdown', { ...event, pointerId: 11, clientX: dots[0].x, clientY: dots[0].y });
+  assert.equal(controls.enabled, false);
+  mapCanvas.emit('pointerup', { ...event, pointerId: 11 }); assert.equal(controls.enabled, true);
 });

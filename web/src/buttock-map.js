@@ -1,7 +1,8 @@
 import { eligibleGrabAnchor } from './grab-points.js';
 // Current cage samples, shared by projection, drawing and picking.
-export const MAP_REGIONS = { pelvis: [9, 10], upper: [4, 10, 11, 12, 13], abs: [2, 14, 15] };
+export const MAP_REGIONS = { pelvis: [9, 10], upper: [4, 10, 11, 12, 13], abs: [2, 14, 15], anal: [16] };
 export function mapModeForRegion(region, current = 'upper') {
+  if (region === 16) return 'anal';
   if (MAP_REGIONS.abs.includes(region)) return 'abs';
   if (region === 9) return 'pelvis';
   if (region === 10) return current === 'upper' ? 'upper' : 'pelvis';
@@ -21,7 +22,7 @@ export function mapSamples(system, regions) {
     const j = i * 3;
     const rest = Array.from(system.rest.slice(j, j + 3)), material = rest.map((v, k) => v + system.offset[j + k]);
     const current = system.pose ? system.pose.point(i, material) : material, posedRest = system.pose ? system.pose.point(i, rest) : rest;
-    points.push({ id: i, region: system.regions[i], x: current[0], y: current[1], z: current[2], restX: posedRest[0], restY: posedRest[1],
+    points.push({ id: i, region: system.regions[i], x: current[0], y: current[1], z: current[2], restX: posedRest[0], restY: posedRest[1], restZ: posedRest[2],
       mm: Math.hypot(system.offset[j], system.offset[j + 1], system.offset[j + 2]) * 1000 });
   }
   return points;
@@ -48,7 +49,7 @@ export class ButtockMap {
   }
   fit(points) {
     const system = this.system;
-    const xs = points.map(p => p.restX), ys = points.map(p => p.restY);
+    const xs = points.map(p => p.restX), ys = points.map(p => this.mapY(p, true));
     this.minX = Math.min(...xs); this.maxX = Math.max(...xs);
     this.minY = Math.min(...ys); this.maxY = Math.max(...ys);
     const margin = Math.max(...points.map(p => system.limits[p.id])) + .01;
@@ -60,8 +61,16 @@ export class ButtockMap {
     this.mode = mode;
     if (this.system) this.setSystem(this.system);
   }
-  project(point) { return { x: this.canvas.width / 2 + (this.mode === 'abs' ? 1 : -1) * (point.x - this.centerX) * this.scale, y: (this.canvas.height - 30) / 2 - (point.y - this.centerY) * this.scale }; }
-  worldDelta(dx, dy) { return [(this.mode === 'abs' ? 1 : -1) * dx / this.scale, -dy / this.scale, 0]; }
+  mapY(point, rest = false) {
+    if (this.mode !== 'anal' || !this.system?.analFrame) return rest ? point.restY : point.y;
+    const t = this.system.analFrame.tangent;
+    return t[1] * (rest ? point.restY : point.y) + t[2] * (rest ? point.restZ : point.z);
+  }
+  project(point) { return { x: this.canvas.width / 2 + (this.mode === 'abs' ? 1 : -1) * (point.x - this.centerX) * this.scale, y: (this.canvas.height - 30) / 2 - (this.mapY(point) - this.centerY) * this.scale }; }
+  worldDelta(dx, dy) {
+    const t = this.mode === 'anal' ? this.system?.analFrame?.tangent || [0, 1, 0] : [0, 1, 0];
+    return [(this.mode === 'abs' ? 1 : -1) * dx / this.scale, -dy / this.scale * t[1], -dy / this.scale * t[2]];
+  }
   pick(x, y, radius = 11) {
     if (!this.system || !Number.isFinite(x) || !Number.isFinite(y)) return null;
     let nearest = null, best = radius * radius;
@@ -102,7 +111,7 @@ export class ButtockMap {
       peaks[p.region] = Math.max(peaks[p.region] || 0, p.mm);
     }
     c.textAlign = 'left'; c.fillStyle = '#a7b7c3';
-    c.fillText(this.mode === 'abs' ? 'Front · abs / obliques' : this.mode === 'pelvis' ? 'Lower back' : 'Upper back / shoulders', 6, 11);
+    c.fillText(this.mode === 'anal' ? 'Rear / underside · anal surface' : this.mode === 'abs' ? 'Front · abs / obliques' : this.mode === 'pelvis' ? 'Lower back' : 'Upper back / shoulders', 6, 11);
     const back = points.filter(p => p.region === 10), glutes = points.filter(p => p.region === 9);
     if (this.mode === 'pelvis' && back.length && glutes.length) {
       const boundary = (Math.min(...back.map(p => p.y)) + Math.max(...glutes.map(p => p.y))) / 2;
@@ -116,7 +125,7 @@ export class ButtockMap {
       c.strokeStyle = '#ffffff'; c.lineWidth = 2; c.beginPath(); c.arc(x, y, 8, 0, Math.PI * 2); c.stroke(); c.lineWidth = 1;
     }
     if (this.mode === 'abs') for (const p of mapSamples(this.system, [3, 10])) peaks[p.region] = Math.max(peaks[p.region] || 0, p.mm);
-    const readings = this.mode === 'abs' ? `abs ${(peaks[14] || 0).toFixed(2)} mm · obliques ${(peaks[15] || 0).toFixed(2)} mm · linked back ${(peaks[10] || 0).toFixed(2)} mm · pelvis ${(peaks[3] || 0).toFixed(2)} mm` : this.mode === 'pelvis' ? `buttocks ${glutePeak.toFixed(2)} mm · back ${backPeak.toFixed(2)} mm` : `upper back ${(peaks[11] || 0).toFixed(2)} mm · shoulders ${(peaks[12] || 0).toFixed(2)} mm · hands ${(peaks[13] || 0).toFixed(2)} mm`;
+    const readings = this.mode === 'anal' ? `anal tissue ${(peaks[16] || 0).toFixed(2)} mm` : this.mode === 'abs' ? `abs ${(peaks[14] || 0).toFixed(2)} mm · obliques ${(peaks[15] || 0).toFixed(2)} mm · linked back ${(peaks[10] || 0).toFixed(2)} mm · pelvis ${(peaks[3] || 0).toFixed(2)} mm` : this.mode === 'pelvis' ? `buttocks ${glutePeak.toFixed(2)} mm · back ${backPeak.toFixed(2)} mm` : `upper back ${(peaks[11] || 0).toFixed(2)} mm · shoulders ${(peaks[12] || 0).toFixed(2)} mm · hands ${(peaks[13] || 0).toFixed(2)} mm`;
     const anchor = selected ? ` · grab anchor: ${this.system.regionNames[selected.region]}` : '';
     this.canvas.setAttribute('aria-label', `${this.mode === 'abs' ? 'Front' : 'Rear'} tissue displacement: peak ${maximum.toFixed(1)} millimeters, mean ${(sum / points.length).toFixed(1)} millimeters across ${points.length} samples; ${this.mode === 'abs' ? '' : `lower back ${backPeak.toFixed(2)} millimeters; `}${readings}${anchor}`);
     this.status.textContent = `${this.system.paused ? 'Paused · ' : this.system.sleeping ? 'Settled · ' : ''}${points.length} samples · peak ${maximum.toFixed(1)} mm · mean ${(sum / points.length).toFixed(1)} mm · ${readings}${anchor}`;
