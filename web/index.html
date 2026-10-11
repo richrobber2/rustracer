@@ -1,38 +1,85 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#111519"><title>Rustracer · Browser studio</title></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#111519"><title>Rustracer · Body creator</title></head>
 <body>
   <header class="topbar">
-    <a class="brand" href="./" aria-label="Rustracer home"><span class="brand-icon">R</span><span>rustracer<span class="brand-sub">BROWSER STUDIO</span></span></a>
-    <span class="project-name"><span class="live-dot"></span> Untitled scene <span class="local-badge">LOCAL</span></span>
+    <a class="brand" href="./" aria-label="Rustracer home"><span class="brand-icon">R</span><span>rustracer<span class="brand-sub">BODY CREATOR</span></span></a>
+    <span class="project-name"><span class="live-dot"></span> Character study <span class="local-badge">LOCAL</span></span>
     <div class="header-actions"><button id="reset" class="quiet">Reset view</button><button id="export" class="quiet">↓ Export PNG</button><button id="open" class="primary">＋ Import model</button></div>
   </header>
   <main>
     <section id="viewport" aria-label="Interactive 3D viewport">
-      <div class="viewport-heading"><span class="eyebrow">YOUR REALTIME WORKSPACE</span><h1>Make light your own.</h1><p>Orbit, experiment, and watch your scene come to life.</p></div>
-      <div class="viewport-toolbar"><button id="demo">◈ Studio demo</button><button id="frame">⊞ Frame model</button><button id="fullscreen" aria-label="Toggle fullscreen">⛶</button></div>
+      <div class="viewport-heading"><span class="eyebrow">HUMAN BODY LAB</span><h1>Shape. Move. Compare.</h1><p>Create adult proportions and explore tissue response.</p></div>
+      <div class="viewport-toolbar"><button data-body="female">Female</button><button data-body="male">Male</button><button id="demo" aria-label="Studio demo">Studio</button><button id="frame">Frame</button><button id="fullscreen" aria-label="Toggle fullscreen">⛶</button></div>
+      <div class="tissue-tools segmented" role="group" aria-label="Surface interaction"><button data-tissue-tool="orbit" class="active" aria-pressed="true">Orbit</button><button data-tissue-tool="press" aria-pressed="false">Press</button><button data-tissue-tool="pull" aria-pressed="false">Pull</button></div>
       <div id="canvas-host"></div>
       <div id="drop-overlay">Drop a GLB or glTF with its textures and .bin files</div>
       <div id="notice" role="status" aria-live="polite"></div>
       <footer class="viewport-footer"><span><span class="live-dot"></span><span id="render-status">Starting renderer…</span></span><span id="scene-stats">—</span><span class="mouse-help">Drag to orbit · Right drag to pan · Scroll to zoom</span></footer>
     </section>
     <aside aria-label="Scene controls">
-      <div class="panel-title"><h2>Scene controls</h2><span class="panel-tag">LIVE</span></div>
-      <p class="panel-intro">Your scene. Your settings.</p>
-      <section class="control-section">
+      <div class="panel-title"><h2>Character creator</h2><span class="panel-tag">LIVE</span></div>
+      <p class="panel-intro">Choose proportions. Test the response.</p>
+      <div class="creator-tabs segmented" role="tablist" aria-label="Workspace"><button id="tab-creator" role="tab" aria-selected="true" aria-controls="creator-panel" data-panel-tab="creator" class="active">Create</button><button id="tab-physics" role="tab" aria-selected="false" aria-controls="physics-panel" data-panel-tab="physics" tabindex="-1">Physics</button><button id="tab-studio" role="tab" aria-selected="false" aria-controls="studio-panel" data-panel-tab="studio" tabindex="-1">Render</button></div>
+      <section id="creator-panel" class="control-section creator-panel" data-panel="creator" role="tabpanel" aria-labelledby="tab-creator">
+        <h3>01 <span>Adult body</span></h3>
+        <label class="select-label" for="body-model">Body<select id="body-model"><option value="" disabled>Choose a body</option><option value="female" selected>Female</option><option value="male">Male</option></select></label>
+        <fieldset id="creator-fields" disabled><div id="proportion-controls"></div>
+        <p class="hint">Values are relative to the base body. Editing proportions resets tissue to its new resting shape.</p>
+        <div class="preset-row"><button id="proportions-reset">Reset shape</button><button id="proportions-random">Randomize</button><button id="focus-pelvis">Focus pelvis</button></div>
+        <h3 class="saved-title">Character presets</h3>
+        <div class="save-slots"><div><span>A</span><button data-save-character="a">Save A</button><button data-load-character="a">Load A</button></div><div><span>B</span><button data-save-character="b">Save B</button><button data-load-character="b">Load B</button></div></div>
+        <div class="preset-row"><button id="character-export">Export preset</button><button id="character-import">Import preset</button></div>
+        </fieldset>
+        <p id="creator-status" class="hint" role="status">Preparing adult body…</p>
+        <input id="character-file" type="file" accept="application/json,.json" hidden>
+      </section>
+      <section id="physics-panel" class="control-section tissue-panel" data-panel="physics" role="tabpanel" aria-labelledby="tab-physics" hidden>
+        <h3><span>◉</span> Soft-tissue experiment</h3>
+        <p id="tissue-mesh-info" class="hint">Detailed MakeHuman bodies · loading…</p>
+        <p id="tissue-instructions" class="hint">Drag to orbit. Select Press or Pull to touch the body.</p>
+        <fieldset id="tissue-fields" disabled>
+          <label class="select-label" for="tissue-preset">Tissue response<select id="tissue-preset"><option value="balanced">Balanced</option><option value="soft">Soft / slower recovery</option><option value="firm">Firm / supported</option><option value="custom" disabled>Custom</option></select></label>
+          <label class="slider-label" for="tissue-stiffness">Stiffness <output id="tissue-stiffness-value">45</output></label><input id="tissue-stiffness" type="range" min="1" max="100" step="1" value="45">
+          <label class="slider-label" for="tissue-damping">Damping <output id="tissue-damping-value">50%</output></label><input id="tissue-damping" type="range" min="0" max="1" step="0.05" value="0.5">
+          <label class="slider-label" for="tissue-tension">Muscle support <output id="tissue-tension-value">0%</output></label><input id="tissue-tension" type="range" min="0" max="1" step="0.05" value="0">
+          <label class="slider-label" for="tissue-gravity">Gravity <output id="tissue-gravity-value">0.3×</output></label><input id="tissue-gravity" type="range" min="0" max="2" step="0.1" value="0.3">
+          <label class="slider-label" for="tissue-radius">Touch radius <output id="tissue-radius-value">10 cm</output></label><input id="tissue-radius" type="range" min="0.03" max="0.25" step="0.01" value="0.1">
+          <label class="slider-label" for="tissue-strength">Touch strength <output id="tissue-strength-value">1.0×</output></label><input id="tissue-strength" type="range" min="0.1" max="3" step="0.1" value="1">
+          <details class="genital-controls" open><summary>Genital tissue response</summary>
+          <label class="slider-label" for="tissue-genitalCompliance">Compliance <output id="tissue-genitalCompliance-value">1.0×</output></label><input id="tissue-genitalCompliance" type="range" min="0.5" max="2" step="0.05" value="1">
+          <label class="slider-label" for="tissue-genitalDamping">Damping <output id="tissue-genitalDamping-value">50%</output></label><input id="tissue-genitalDamping" type="range" min="0" max="1" step="0.05" value="0.5">
+          <p class="hint">External tissue with a supported attachment. Proportions also change its response and movement limit.</p></details>
+          <label class="select-label" for="tissue-region">Region for touch, pulse & support<select id="tissue-region"><option value="-1">Whole body</option></select></label>
+          <label class="select-label" for="tissue-rate">Surface lighting updates<select id="tissue-rate"><option value="15">Responsive · 15 Hz</option><option value="30" selected>Balanced · 30 Hz</option><option value="60">Detailed · 60 Hz</option></select></label><label class="select-label" for="tissue-view">Surface view<select id="tissue-view"><option value="skin">Skin</option><option value="clay">Clay</option><option value="heat">Displacement · blue 0 to red 50 mm</option><option value="wire">Wireframe</option></select></label>
+          <div class="preset-row"><button id="tissue-impulse">Pulse</button><button id="tissue-vibrate" aria-pressed="false">Vibration</button><button id="tissue-reset">Reset tissue</button></div>
+          <button id="tissue-pause" class="wide quiet">Pause physics</button>
+        </fieldset>
+        <p id="tissue-status" class="tissue-status" role="status">Preparing body…</p>
+        <p class="hint">GLB downloads contain the base body. Use Export preset to save your proportions.</p><a id="body-download" class="asset-link" href="./bodies/female.glb" download="female-body.glb">Download female GLB</a>
+        <details class="tissue-notes"><summary>About this simulation</summary><p>Illustrative surface dynamics on adult anatomical meshes with a fixed skeletal pose. Muscle support changes stiffness and shape; muscles and fat are not separate anatomical layers. The genital mesh has its own response settings and bounded deformation. No tissue self-collision, internal anatomy, or calibrated biological properties. Use this for visual experiments, not medical predictions. Path tracing pauses physics to render the current shape.</p><p>Models and skin: MakeHuman / MPFB. External anatomy: MHX2. Asset credits and license details are included. <a href="./bodies/ATTRIBUTION.txt" target="_blank" rel="noopener">Credits</a></p></details>
+      </section>
+      <section id="studio-panel" class="control-section" data-panel="studio" role="tabpanel" aria-labelledby="tab-studio" hidden>
         <h3><span>01</span> Renderer</h3>
         <div class="segmented" role="group" aria-label="Render mode"><button id="mode-realtime" class="active" aria-pressed="true">Interactive</button><button id="mode-path" aria-pressed="false">Path traced</button></div>
         <p id="mode-description" class="hint">Instant feedback for exploring and editing.</p>
-        <label class="slider-label" for="quality">Resolution <output id="quality-value">100%</output></label><input id="quality" type="range" min="0.25" max="1" step="0.25" value="1">
-        <div id="path-controls" hidden><label class="slider-label" for="bounces">Light bounces <output id="bounces-value">5</output></label><input id="bounces" type="range" min="1" max="12" step="1" value="5"><button id="pause" class="wide quiet">Pause accumulation</button></div>
+        <label class="slider-label" for="quality">Resolution <output id="quality-value">100%</output></label><input id="quality" type="range" min="0.125" max="1" step="0.125" value="1">
+        <div id="path-controls" hidden>
+          <label class="select-label" for="path-preset">Path tracing quality<select id="path-preset"><option value="fast">Fast — best for phones</option><option value="balanced">Balanced</option><option value="detail">Detail</option><option value="custom" disabled>Custom</option></select></label>
+          <p id="path-resolution" class="hint"></p>
+          <label class="slider-label" for="bounces">Light bounces <output id="bounces-value">2</output></label><input id="bounces" type="range" min="1" max="12" step="1" value="2">
+          <label class="select-label" for="sample-limit">Stop after<select id="sample-limit"><option value="32">32 samples · quick preview</option><option value="64" selected>64 samples · save battery</option><option value="256">256 samples · cleaner image</option><option value="0">Keep refining</option></select></label>
+          <button id="pause" class="wide quiet">Pause accumulation</button>
+          <p class="hint">Fast uses lower resolution and fewer light bounces. Move freely; tracing resumes when you stop.</p>
+        </div>
       </section>
-      <section class="control-section">
+      <section class="control-section" data-panel="studio" hidden>
         <h3><span>02</span> Camera</h3>
         <label class="slider-label" for="fov">Field of view <output id="fov-value">45°</output></label><input id="fov" type="range" min="20" max="90" step="1" value="45">
         <label class="toggle"><span>Auto orbit</span><input id="orbit" type="checkbox"></label>
         <div class="preset-row"><button data-view="front">Front</button><button data-view="top">Top</button><button data-view="iso">Perspective</button></div>
       </section>
-      <section class="control-section">
+      <section class="control-section" data-panel="studio" hidden>
         <h3><span>03</span> Light & atmosphere</h3>
         <label class="slider-label" for="exposure">Exposure <output id="exposure-value">1.0</output></label><input id="exposure" type="range" min="0.1" max="3" step="0.1" value="1">
         <label class="slider-label" for="environment">Environment <output id="environment-value">0.8</output></label><input id="environment" type="range" min="0" max="3" step="0.1" value="0.8">
@@ -42,9 +89,9 @@
         <label class="toggle"><span>Ground plane</span><input id="ground" type="checkbox" checked></label>
         <label class="select-label" for="tonemap">Tone mapping<select id="tonemap"><option value="aces">Filmic ACES</option><option value="neutral">Neutral</option><option value="linear">Linear</option></select></label>
       </section>
-      <section class="control-section">
+      <section class="control-section" data-panel="studio" hidden>
         <h3><span>04</span> Model & materials</h3>
-        <div id="model-name" class="model-name">Studio mannequin</div>
+        <div id="model-name" class="model-name">Studio collection</div>
         <label class="select-label" for="material">Material<select id="material"></select></label>
         <label class="color-row" for="color">Base color<input id="color" type="color" value="#d8a957"></label>
         <label class="slider-label" for="roughness">Roughness <output id="roughness-value">0.25</output></label><input id="roughness" type="range" min="0" max="1" step="0.01" value="0.25">
@@ -52,7 +99,6 @@
         <button id="restore-materials" class="wide quiet">Restore original materials</button>
         <label class="slider-label" for="rotation">Model rotation <output id="rotation-value">0°</output></label><input id="rotation" type="range" min="0" max="360" step="1" value="0">
         <label class="slider-label" for="scale">Model scale <output id="scale-value">1.00×</output></label><input id="scale" type="range" min="0.25" max="2" step="0.05" value="1">
-        <label class="toggle" for="skeleton"><span>Show skeleton</span><input id="skeleton" type="checkbox" disabled></label>
         <div id="animation-controls" hidden><label class="select-label" for="animation">Animation<select id="animation"></select></label><button id="play" class="wide quiet">Play animation</button><p class="hint">Animation uses the interactive renderer.</p></div>
       </section>
       <div class="privacy-note"><span>◇</span> Models stay on your device.<br>No account. No upload.</div>

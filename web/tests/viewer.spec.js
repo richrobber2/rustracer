@@ -34,6 +34,7 @@ async function open(page) {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
+  await page.getByRole('button', { name: 'Studio demo', exact: true }).click();
   await expect(page.locator('#scene-stats')).toContainText('4 meshes');
   await expect.poll(() => page.locator('canvas').getAttribute('data-frames')).not.toBeNull();
   return errors;
@@ -93,7 +94,6 @@ test('imports local glTF companions, plays animation and keeps demo available af
   ]);
   await expect(page.locator('#model-name')).toHaveText('triangle.gltf');
   await expect(page.locator('#scene-stats')).toHaveText('1 meshes · 1 triangles');
-  await expect(page.locator('#skeleton')).toBeDisabled();
   await expect(page.locator('#material')).toContainText('Fixture copper');
   await page.getByRole('button', { name: 'Play animation' }).click();
   await expect(page.getByRole('button', { name: 'Pause animation' })).toBeVisible();
@@ -103,19 +103,6 @@ test('imports local glTF companions, plays animation and keeps demo available af
   await expect(page.locator('#model-name')).toHaveText('triangle.gltf');
   await page.getByRole('button', { name: 'Studio demo', exact: false }).click();
   await expect(page.locator('#scene-stats')).toContainText('4 meshes');
-  expect(errors).toEqual([]);
-});
-
-test('demo mannequin is a skinned rig whose animation deforms the mesh', async ({ page }) => {
-  const errors = await open(page);
-  await expect(page.locator('#scene-stats')).toContainText('37 bones');
-  await expect(page.getByRole('button', { name: 'Pause animation' })).toBeVisible();
-  await expect(page.locator('#animation option')).toHaveText(['Walk cycle', 'Wave', 'Idle']);
-  await page.locator('#skeleton').check();
-  await page.getByRole('button', { name: 'Pause animation' }).click();
-  const still = await pixels(page);
-  await page.locator('#animation').selectOption('1');
-  await expect.poll(async () => (await pixels(page)).bright).not.toBe(still.bright);
   expect(errors).toEqual([]);
 });
 

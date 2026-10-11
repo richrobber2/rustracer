@@ -1,4 +1,4 @@
-# Rustracer browser studio
+# Rustracer body creator and browser studio
 
 A self-contained browser renderer alongside the original Rust/Vulkan application. It uses Three.js for interactive rendering and `three-gpu-pathtracer` for progressive WebGL 2 path tracing. It does not run the Vulkan executable or reproduce every original shader or glTF extension.
 
@@ -20,27 +20,68 @@ npm run preview -- --port 5173 --strictPort
 
 Deploy the contents of `dist/` to any static web host. Asset paths are relative, so subdirectory hosting works. No server-side renderer, API, account, or cloud GPU is required; the user's browser must support WebGL 2. Hardware acceleration is recommended, especially for path tracing.
 
-## Tests
+## Character creator
 
-`npm test` runs the browser tests and `tests/skin.spec.js`, a Node-only check of the mannequin's skin deformation. It verifies skin weights and the bind pose, checks that limbs move rigidly away from joints, then bends each joint to the end of a human range of motion and plays every clip. Throughout, every bone must stay under the soft skin (gold ball joints excluded) at no less than half its rest depth, no skin edge may stretch past 2.5×, and a foot must stay on the pedestal.
+Use the **Create**, **Physics**, and **Render** tabs to move between body proportions, deformation experiments, and lighting/rendering. All character inputs describe adult bodies.
+
+- Create: female/male base; height, shoulders, chest, waist, hips, thighs, genital length and width. Sliders describe percentages of the base shape. Randomize/reset the proportions, or focus the camera on the pelvis.
+- Presets: save/load slots A and B on the current device, or export/import a versioned JSON preset with proportions and tissue settings. Import validation clamps numeric fields and rejects unsupported versions. These presets do not contain personal images or uploaded models.
+- Physics: genital tissue is a separate selectable force region with its own compliance and damping. Larger proportional geometry changes support and permitted displacement. Press, pull, pulse, and vibration work on the selected region. Parameters are illustrative, not measurements of human tissue.
+- Proportion edits transform the rest surface, eye meshes, and simulation cage together; they reset existing deformation. The fixed-pose skeleton remains a base rig. **Download base GLB** preserves that base; **Export preset** preserves creator changes.
 
 ## Controls
 
+- The body lab starts with a detailed adult female body; choose **Male** or **Female** to switch. Select **Press** or **Pull**, touch the surface, drag, and release to observe recovery. Empty-space dragging still orbits the camera. **Studio** returns to the original demonstration scene.
+- Adjust stiffness, damping, gravity, touch radius/strength, and muscle support. Target individual body regions, apply a pulse, enable vibration, or pause/reset the tissue. View textured skin, clay, displacement colors (0–50 mm), or wireframe. Path tracing pauses physics and renders the held shape; resume physics to return to interactive rendering.
+- Download either rigged body as a GLB. Downloads contain the original neutral body, embedded textures, skeletal rig, and cage influence attributes; they do not bake the current simulated deformation.
 - Orbit with left drag, pan with right drag, and zoom with the wheel or touch gestures. Frame the model, choose camera presets, change field of view, or enable auto orbit.
-- Switch between interactive rendering and progressive path tracing. Control resolution, light bounces, and pause/resume accumulation. Moving the camera resets accumulation. Animation and auto orbit switch to interactive rendering.
+- Switch between interactive rendering and progressive path tracing. Path tracing starts with **Fast**: 50% CSS-pixel resolution, a 200,000-pixel ceiling, and two light bounces. High-DPI scaling is disabled in path mode; **Balanced** and **Detail** increase quality and the pixel budget. Interactive resolution is remembered separately. The resolution slider can reduce either mode to 12.5%.
+- Orbit/zoom shows a raster preview and resumes path tracing 180 ms after camera motion, including damping, stops. Path tracing stops after 64 samples by default; choose a different sample limit or **Refine further** to continue. Moving the camera or editing the scene restarts accumulation. Hidden tabs skip rendering. Animation and auto orbit switch to interactive rendering.
 - Adjust exposure, environment intensity, key light strength/direction, background color, ground visibility, and tone mapping.
 - Select individual materials and edit base color, roughness, and metallic response. Restore original materials; rotate or scale the model.
 - Import a `.glb`, or choose a folder containing one `.gltf` plus its relative `.bin` and texture files. Multiple loose companion files can also be selected or dropped. Directory imports preserve nested paths. Models are normalized to the studio and automatically framed. Files stay in memory on the user's device; external resource URLs are rejected.
-- Play/pause animation clips, and toggle a skeleton overlay on any rigged model. Export the current viewport as a PNG; resolution follows the resolution slider and viewport size.
+- Play/pause imported animation clips. Export the current viewport as a PNG; resolution follows the resolution slider and viewport size.
 
-The built-in studio demo needs no downloaded models. It is a procedural mannequin: one skinned mesh on a 19-bone hierarchy, with vertices near each joint weighted across the bones on both sides so limbs bend continuously. Each joint also has a helper bone that turns half as far as the bone below it, and the skin over the joint follows it. This keeps elbows, knees and shoulders from collapsing toward the bone when bent (37 bones in total). Its walk, wave and idle clips drive every bone from one shared phase (opposite arm and leg swing together, the chest counter-rotates against the hips, the head holds its gaze), and the hips height is solved each frame so the lowest foot stays on the pedestal. Pause a clip and switch to path tracing to render that pose. Imports support uncompressed glTF/GLB, with a 250 MB total file limit. Draco, Meshopt, and KTX2 assets need decoding before import. Material controls apply to standard/physical PBR materials. glTF extension and animation parity with the original Vulkan renderer is not guaranteed. Large models and complex path-traced scenes may be slow or exceed browser GPU limits.
+The built-in studio demo needs no downloaded models. Imports support uncompressed glTF/GLB, with a 250 MB total file limit. Draco, Meshopt, and KTX2 assets need decoding before import. Material controls apply to standard/physical PBR materials. glTF extension and animation parity with the original Vulkan renderer is not guaranteed. Large models and complex path-traced scenes may be slow or exceed browser GPU limits.
+
+## Bodies and simulation
+
+The adult female and male bodies derive from the CC0 MakeHuman/MPFB base mesh, adult shape targets, default rig, weights, and system textures. The female body has 108,080 surface triangles; the male body has 108,624. Both include a 163-bone skeleton and an embedded 2K skin texture. External anatomical surfaces from the MHX2 assets are welded into the main body before subdivision. The source and license clarification are recorded in the attribution file. Files and attribution are in `public/bodies/`; the manifest records the source commit and generated model hashes. Assets are approximately 10 MB per body and load on demand.
+
+The simulation uses a fixed-step spring cage (1,532 particles for female; 1,867 for male, including 101/171 genital particles) to deform the detailed surface. Regional support, damping, gravity, and touch forces provide an interactive visual approximation. The skeleton stays in its neutral pose. Muscle support changes restoring stiffness and a small shape offset; there are no separate anatomical muscle/fat layers, volumetric tissue mechanics, tissue self-collision, or calibrated biological properties. This is a visual experimentation tool, not a source of biomechanical ground truth or medical predictions.
+
+`scripts/prepare-human-models.py` regenerates the assets with Python, NumPy, and SciPy:
+
+```sh
+python scripts/prepare-human-models.py /path/to/mpfb2 /path/to/makehuman-system-assets /path/to/mhx2-makehuman-exchange
+```
+
+The MPFB checkout must include `src/mpfb/data/3dobjs`, `targets/macrodetails`, and `rigs/standard`. The system-assets directory supplies the female/male young light-skin diffuse textures and low-poly eyes. The MHX2 checkout supplies `import_runtime_mhx2/data/hm8/genitalia/{penis,vulva}.mxa`; their exact source revision is in the manifest. See `public/bodies/ATTRIBUTION.txt` for the upstream sources and `CC0-1.0.txt` for the asset license. No Blender installation is needed.
+
+## Performance
+
+The simulation caches spring coefficients and sleeps once its velocity stays below the settling threshold. Grabs, pulses, vibration, parameter changes, and proportion edits wake it. Surface updates visit the vertices affected by changed cage particles; face normals are updated only where needed, with a linear whole-body path when many particles change. Normals are welded across texture seams and can refresh at 15/30/60 Hz independently of the 120 Hz solver. Shape-slider events coalesce to one rest-shape rebuild per animation frame. Superseded body downloads are cancelled.
+
+The Physics tab reports CPU update time separately from the viewport frame rate. `PERFORMANCE.md` records the CPU benchmark and its limits. Reproduce it with:
+
+```sh
+node checks/body-performance.mjs
+```
 
 ## Validate
+
+Model loading, rig binding, cage weights, welded anatomy, reversible proportions, preset validation, selective normals, sleep/wake behavior, simulation recovery/stability, and rendering scheduler checks without a browser:
+
+```sh
+node --test checks/*.test.mjs
+```
+
+Full browser/rendering checks when Chromium is available:
 
 ```sh
 npm test
 ```
 
-Tests use the system Chromium at `/usr/bin/chromium` (override with `CHROMIUM_PATH`) and software WebGL through SwiftShader, so they run in this cloud environment without a GPU. They validate actual rendered pixels, material/camera controls, PNG output, local glTF companions, binary GLB imports, missing/remote resource handling, progressive sample accumulation, and mobile layout. The existing native Rust tests are independent and retain their known missing-asset/path failures.
+Browser tests use Chromium at `/usr/bin/chromium` (override with `CHROMIUM_PATH`) and software WebGL through SwiftShader. When a supported browser environment is available, they validate the studio's rendered pixels, material/camera controls, PNG output, local glTF companions, binary GLB imports, missing/remote resource handling, progressive sample accumulation, and mobile layout. Device performance and body-lab interaction still require a browser check. The existing native Rust tests are independent and retain their known missing-asset/path failures.
 
 In the managed cloud environment, use `npm --cache /workspace/tooling/npm-cache ci` because the default npm cache directory is not writable. The environment draft includes installation and startup instructions for both workflows. No secret values are required.
