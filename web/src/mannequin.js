@@ -96,8 +96,14 @@ function setSkin(geometry, weightsFor) {
   return geometry;
 }
 
+// Every joint also gets a helper bone that sits on it and turns half as far as the bone below.
+// Skin over the joint follows the helper, so each linear blend spans only half the bend. Without
+// it, blending two rotations directly pulls the skin in toward the bone (the elbow and shoulder
+// "collapse" of plain linear blend skinning).
+const half = (name) => `${name}_half`;
+
 function buildBones() {
-  const bones = new Map();
+  const bones = new Map(), helpers = [];
   for (const [name, parent] of BONES) {
     const bone = new THREE.Bone();
     bone.name = name;
@@ -106,35 +112,52 @@ function buildBones() {
     bone.position.copy(local);
     bones.get(parent)?.add(bone);
     bones.set(name, bone);
+    if (!parent) continue;
+    const helper = new THREE.Bone();
+    helper.name = half(name);
+    helper.position.copy(local);
+    bones.get(parent).add(helper);
+    bones.set(helper.name, helper);
+    helpers.push([helper, bone]);
   }
-  return bones;
+  return { bones, helpers };
 }
 
+class RiggedMesh extends THREE.SkinnedMesh {
+  updateMatrixWorld(force) {
+    for (const [helper, bone] of this.helpers) helper.quaternion.slerpQuaternions(IDENTITY, bone.quaternion, 0.5);
+    super.updateMatrixWorld(force);
+  }
+}
+const IDENTITY = new THREE.Quaternion();
+
 function buildGeometry(boneIndex) {
-  const smooth = (edge, x) => THREE.MathUtils.smoothstep(x, -edge, edge);
+  const ease = (x) => THREE.MathUtils.smoothstep(x, 0, 1);
   const body = segments().map((segment) => {
     const from = v3(segment.from), to = v3(segment.to);
     const geometry = taperedCapsule(segment.r[0], segment.r[1], from.distanceTo(to));
     place(geometry, from, to, segment.scale);
     const axis = to.clone().sub(from).normalize();
     const offset = new THREE.Vector3();
+    // Across a joint, the skin hands over from the parent bone to the joint's helper and then to
+    // the child, by signed distance along the limb. Both segments meeting at a joint compute the
+    // same weights for the same place, so the skin is seamless.
+    const across = (parent, child, vertex) => {
+      const j = joint[child];
+      const u = THREE.MathUtils.clamp(offset.subVectors(vertex, j.position).dot(axis) / j.blend, -1, 1);
+      return u < 0
+        ? { [parent]: ease(-u), [half(child)]: 1 - ease(-u) }
+        : { [half(child)]: 1 - ease(u), [child]: ease(u) };
+    };
     return setSkin(geometry, (vertex) => {
-      // Signed distances along the limb from each joint decide how much of the neighbouring
-      // bone a vertex follows. Both sides of a joint use the same blend, so the skin is seamless.
-      let parentWeight = 0, childWeight = 0;
-      if (segment.start) {
-        const j = joint[segment.bone];
-        parentWeight = 1 - smooth(j.blend, offset.subVectors(vertex, j.position).dot(axis));
-      }
-      if (segment.end) {
-        const j = joint[segment.end];
-        childWeight = smooth(j.blend, offset.subVectors(vertex, j.position).dot(axis));
-      }
-      return [
-        [boneIndex.get(segment.bone), Math.max(0, 1 - parentWeight - childWeight)],
-        ...(segment.start ? [[boneIndex.get(segment.start), parentWeight]] : []),
-        ...(segment.end ? [[boneIndex.get(segment.end), childWeight]] : []),
-      ].sort((a, b) => b[1] - a[1]);
+      const weights = new Map();
+      const add = (part) => Object.entries(part).forEach(([bone, w]) => weights.set(bone, (weights.get(bone) || 0) + w));
+      if (segment.start) add(across(segment.start, segment.bone, vertex));
+      if (segment.end) add(across(segment.bone, segment.end, vertex));
+      // Away from the joints the segment follows its own bone rigidly.
+      const own = (weights.get(segment.bone) || 0) + 1 - [...weights.values()].reduce((sum, w) => sum + w, 0);
+      weights.set(segment.bone, Math.max(0, own));
+      return [...weights].map(([bone, w]) => [boneIndex.get(bone), w]).sort((a, b) => b[1] - a[1]);
     });
   });
   // Gold ball joints sit at each articulation and follow the bone that rotates there.
@@ -227,8 +250,9 @@ function wave(p) {
   rotate.chest = [0.02 * Math.sin(2 * p), -0.06, -0.05];
   rotate.neck = [0, -0.12, 0.05];
   rotate.head = [0.06, -0.18, 0.12 + 0.03 * Math.sin(p)];
-  rotate.shoulder_R = [0, 0, -0.16];
-  rotate.upperArm_R = [-0.25, 0, -2.25];
+  // Above shoulder height the collarbone lifts too, about one degree for every two at the shoulder.
+  rotate.shoulder_R = [0, 0, -0.55];
+  rotate.upperArm_R = [-0.25, 0, -1.75];
   // The forearm sweeps side to side while the hand trails it slightly.
   rotate.forearm_R = [-0.5, 0, -0.45 + 0.5 * Math.sin(2 * p)];
   rotate.hand_R = [0, 0, 0.22 * Math.sin(2 * p - 0.6)];
@@ -263,10 +287,11 @@ function idle(p) {
 }
 
 export function createMannequin(materials) {
-  const bones = buildBones();
+  const { bones, helpers } = buildBones();
   const ordered = [...bones.values()];
   const boneIndex = new Map(ordered.map((bone, i) => [bone.name, i]));
-  const mesh = new THREE.SkinnedMesh(buildGeometry(boneIndex), materials);
+  const mesh = new RiggedMesh(buildGeometry(boneIndex), materials);
+  mesh.helpers = helpers;
   mesh.name = 'Mannequin';
   mesh.add(bones.get('hips'));
   mesh.updateMatrixWorld(true);

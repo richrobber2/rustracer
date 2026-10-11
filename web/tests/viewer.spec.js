@@ -108,7 +108,7 @@ test('imports local glTF companions, plays animation and keeps demo available af
 
 test('demo mannequin is a skinned rig whose animation deforms the mesh', async ({ page }) => {
   const errors = await open(page);
-  await expect(page.locator('#scene-stats')).toContainText('19 bones');
+  await expect(page.locator('#scene-stats')).toContainText('37 bones');
   await expect(page.getByRole('button', { name: 'Pause animation' })).toBeVisible();
   await expect(page.locator('#animation option')).toHaveText(['Walk cycle', 'Wave', 'Idle']);
   await page.locator('#skeleton').check();
