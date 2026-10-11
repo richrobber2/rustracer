@@ -101,10 +101,11 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
     $('skin-finish').value = skin.finish;
     $('skin-detail').value = skin.detail; $('skin-detail-value').value = `${Math.round(skin.detail * 100)}%`;
     $('skin-roughness').value = skin.roughness; $('skin-roughness-value').value = skin.roughness.toFixed(2);
-    $('skin-detail').disabled = $('skin-roughness').disabled = skin.finish === 'original';
+    $('skin-buttockTexture').value = skin.buttockTexture; $('skin-buttockTexture-value').value = `${Math.round(skin.buttockTexture * 100)}%`;
+    $('skin-detail').disabled = $('skin-roughness').disabled = $('skin-buttockTexture').disabled = skin.finish === 'original';
   }
   function showSkin() { if ($('tissue-view').value !== 'skin') { $('tissue-view').value = 'skin'; applyView(); } }
-  for (const id of ['detail', 'roughness']) $(`skin-${id}`).oninput = () => {
+  for (const id of ['detail', 'roughness', 'buttockTexture']) $(`skin-${id}`).oninput = () => {
     if (!current) return;
     requestRealtime(); current.skin.configure({ [id]: Number($(`skin-${id}`).value) }); showSkin(); displaySkin();
   };
@@ -272,8 +273,11 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
       gltf.scene.traverse(node => { if (node.geometry?.attributes._cage_index) mesh = node; });
       if (!mesh) throw new Error('This body has no tissue controls.');
       const data = addAnalSurface(mesh.geometry, sourceData);
+      const geometry = mesh.geometry;
+      const color = new THREE.Float32BufferAttribute(new Float32Array(geometry.attributes.position.count * 3), 3);
+      geometry.setAttribute('color', color);
       const sourceMaterial = mesh.material;
-      skinAppearance = new SkinAppearance(sourceMaterial, renderer);
+      skinAppearance = new SkinAppearance(sourceMaterial, renderer, geometry, data);
       skinAppearance.configure(sanitizeSkin(character?.appearance));
       mesh.material = skinAppearance.material; sourceMaterial.dispose();
       endPointer(); requestRealtime();
@@ -285,13 +289,10 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
       }
       $('tissue-buttSide').value = String(system.parameters.buttSide);
       shape = sanitizeProportions(character?.proportions); displayShape();
-      const geometry = mesh.geometry;
       isolateButtockWeights(geometry, system);
       const motion = new MuscleMotion(gltf.scene, mesh, data);
       motion.restore(character?.motion);
       const pose = new CagePose(mesh, system, data); system.pose = pose;
-      const color = new THREE.Float32BufferAttribute(new Float32Array(geometry.attributes.position.count * 3), 3);
-      geometry.setAttribute('color', color);
       geometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
       geometry.attributes.normal.setUsage(THREE.DynamicDrawUsage);
       color.setUsage(THREE.DynamicDrawUsage);

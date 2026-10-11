@@ -70,7 +70,7 @@ test('the path-tracer material writer receives pore normals, roughness and the s
 test('appearance presets sanitize values and older characters keep neutral appearance defaults', () => {
   assert.deepEqual(sanitizeSkin(), DEFAULT_SKIN);
   assert.deepEqual(sanitizeSkin({ finish: 'bad', detail: Infinity, roughness: -5 }), { ...DEFAULT_SKIN, roughness: .4 });
-  const appearance = { finish: 'original', detail: .3, roughness: .8 };
+  const appearance = { finish: 'original', detail: .3, roughness: .8, buttockTexture: .45 };
   const preset = readCharacter({ version: 1, sex: 'female', appearance });
   assert.deepEqual(preset.appearance, appearance); assert.deepEqual(readCharacter(JSON.parse(JSON.stringify(preset))).appearance, appearance);
   assert.equal(readCharacter({ version: 1, sex: 'male' }).appearance, undefined);

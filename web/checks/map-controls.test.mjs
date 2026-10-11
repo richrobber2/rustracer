@@ -55,7 +55,7 @@ test('actual map controls capture a displaced sample, cancel, and release on pan
   const colorMap = skinMesh.material.map;
   elements.get('skin-finish').value = 'original'; elements.get('skin-finish').onchange();
   assert.equal(skinMesh.material.normalMap, null); assert.equal(skinMesh.material.map, colorMap);
-  assert.ok(elements.get('skin-detail').disabled);
+  assert.ok(elements.get('skin-detail').disabled && elements.get('skin-buttockTexture').disabled);
   elements.get('skin-reset').onclick(); assert.ok(skinMesh.material.normalMap); assert.equal(elements.get('skin-detail').disabled, false);
   elements.get('tissue-view').value = 'heat'; elements.get('tissue-view').onchange();
   assert.equal(skinMesh.material.normalMap, null); assert.equal(skinMesh.material.roughnessMap, null);
@@ -63,6 +63,16 @@ test('actual map controls capture a displaced sample, cancel, and release on pan
   elements.get('skin-roughness').value = '.48'; elements.get('skin-roughness').oninput();
   assert.equal(elements.get('tissue-view').value, 'skin'); assert.equal(elements.get('skin-detail-value').value, '90%');
   assert.equal(skinMesh.material.roughness, .48); assert.ok(Math.abs(skinMesh.material.normalScale.x - .27) < 1e-6);
+  const skinColors = skinMesh.geometry.attributes.color.array.slice(), buttRoughness = skinMesh.material.roughnessMap;
+  assert.ok(skinMesh.material.vertexColors && skinColors.some(v => v !== 1));
+  elements.get('skin-buttockTexture').value = '0'; elements.get('skin-buttockTexture').oninput();
+  assert.equal(elements.get('skin-buttockTexture-value').value, '0%'); assert.equal(skinMesh.material.vertexColors, false);
+  assert.notEqual(skinMesh.material.roughnessMap, buttRoughness);
+  elements.get('tissue-view').value = 'heat'; elements.get('tissue-view').onchange();
+  assert.notDeepEqual(skinMesh.geometry.attributes.color.array, skinColors);
+  elements.get('skin-buttockTexture').value = '.7'; elements.get('skin-buttockTexture').oninput();
+  assert.equal(elements.get('tissue-view').value, 'skin'); assert.deepEqual(skinMesh.geometry.attributes.color.array, skinColors);
+  assert.equal(skinMesh.material.roughnessMap, buttRoughness);
   const data = JSON.parse(fs.readFileSync(new URL('../public/bodies/female-cage.json', import.meta.url))), system = new TissueSystem(data);
   for (let f = 0; f < 20; f++) { lab.update(1 / 60, f * 1000 / 60); system.step(1 / 60); }
   const projection = new ButtockMap(mapCanvas, { textContent: '' }, 'upper'); projection.setSystem(system);

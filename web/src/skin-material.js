@@ -1,9 +1,10 @@
 import * as THREE from 'three';
+import { ButtockSkin } from './buttock-skin.js';
 
-export const DEFAULT_SKIN = { finish: 'detailed', detail: .65, roughness: .62 };
+export const DEFAULT_SKIN = { finish: 'detailed', detail: .65, roughness: .62, buttockTexture: .7 };
 export function sanitizeSkin(value = {}) {
   const range = (v, fallback, lo, hi) => Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : fallback;
-  return { finish: value.finish === 'original' ? 'original' : 'detailed', detail: range(value.detail, .65, 0, 1), roughness: range(value.roughness, .62, .4, .85) };
+  return { finish: value.finish === 'original' ? 'original' : 'detailed', detail: range(value.detail, .65, 0, 1), roughness: range(value.roughness, .62, .4, .85), buttockTexture: range(value.buttockTexture, .7, 0, 1) };
 }
 
 // Small, periodic material maps. No edits to the photographic color atlas or
@@ -58,11 +59,13 @@ export function createSkinMaps(size = 256) {
 }
 
 export class SkinAppearance {
-  constructor(source, renderer) {
+  constructor(source, renderer, geometry = null, data = null) {
     this.sourceMap = source.map; this.sourceRoughness = source.roughness; this.maps = createSkinMaps();
+    this.buttocks = geometry && data ? new ButtockSkin(geometry, data, this.maps.roughness) : null;
     const anisotropy = Math.max(1, Math.min(4, renderer?.capabilities?.getMaxAnisotropy?.() || 1));
     if (this.sourceMap) this.sourceMap.anisotropy = anisotropy;
     this.maps.normal.anisotropy = this.maps.roughness.anisotropy = anisotropy;
+    if (this.buttocks) this.buttocks.roughness.anisotropy = anisotropy;
     this.material = new THREE.MeshPhysicalMaterial({ name: source.name || 'Skin', map: source.map, color: source.color, roughness: source.roughness, metalness: 0, side: source.side });
     this.settings = { ...DEFAULT_SKIN }; this.view = 'skin'; this.apply();
   }
@@ -71,19 +74,21 @@ export class SkinAppearance {
   apply() {
     const m = this.material, p = this.settings;
     const skin = this.view === 'skin', detailed = skin && p.finish === 'detailed';
+    const buttocks = detailed && p.buttockTexture > 0 && this.buttocks;
     const hasNormal = Boolean(m.normalMap), hasRoughness = Boolean(m.roughnessMap), wasSkin = Boolean(m.map);
     const hadColors = m.vertexColors, wasWire = m.wireframe;
     m.map = skin ? this.sourceMap : null;
     m.normalMap = detailed && p.detail > 0 ? this.maps.normal : null;
-    m.roughnessMap = detailed ? this.maps.roughness : null;
+    m.roughnessMap = detailed ? (buttocks ? this.buttocks.roughness : this.maps.roughness) : null;
     m.normalScale.setScalar(p.detail * .3);
     m.roughness = detailed ? p.roughness : this.sourceRoughness;
     m.ior = detailed ? 1.4 : 1.5; m.specularIntensity = 1;
     m.color.set(skin || this.view === 'heat' ? '#ffffff' : '#bca58a');
-    m.vertexColors = this.view === 'heat'; m.wireframe = this.view === 'wire';
+    m.vertexColors = this.view === 'heat' || Boolean(buttocks); m.wireframe = this.view === 'wire';
+    if (buttocks) this.buttocks.apply(p.buttockTexture);
     if (hasNormal !== Boolean(m.normalMap) || hasRoughness !== Boolean(m.roughnessMap) || wasSkin !== Boolean(m.map) || hadColors !== m.vertexColors || wasWire !== m.wireframe) m.needsUpdate = true;
   }
   // Maps can be temporarily removed in clay/heat/wire, so their owner disposes
   // them even when the generic scene cleanup cannot find them on the material.
-  dispose() { this.maps.normal.dispose(); this.maps.roughness.dispose(); }
+  dispose() { this.maps.normal.dispose(); this.maps.roughness.dispose(); this.buttocks?.dispose(); }
 }
