@@ -2,6 +2,7 @@ import './style.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { createMannequin } from './mannequin.js';
 
 const $ = (id) => document.getElementById(id);
 const host = $('canvas-host');
@@ -76,7 +77,7 @@ async function init() {
   scene.add(floor);
 
   let model = null, materials = [], originalMaterials = new Map();
-  let mixer = null, animations = [], playing = false, action = null;
+  let mixer = null, animations = [], playing = false, action = null, skeletonHelper = null;
   let pathTracer = null, mode = 'realtime', modeLoading = false, paused = false;
   let importSerial = 0, savedBaseScale = 1, materialTimer;
   let pendingExport = false, contextLost = false, disposed = false;
@@ -168,6 +169,7 @@ async function init() {
     if (!object) return;
     const geometries = new Set(), mats = new Set(), textures = new Set();
     object.traverse((node) => {
+      if (node.isSkinnedMesh) node.skeleton.dispose();
       if (node.geometry) geometries.add(node.geometry);
       for (const mat of Array.isArray(node.material) ? node.material : [node.material]) {
         if (!mat) continue;
@@ -212,13 +214,14 @@ async function init() {
     updateMaterialUI();
   }
   function sceneStats() {
-    let meshes = 0, triangles = 0;
+    let meshes = 0, triangles = 0, bones = 0;
     model.traverse((node) => {
+      if (node.isBone) bones++;
       if (!node.isMesh || !node.geometry) return;
       meshes++;
       triangles += (node.geometry.index?.count ?? node.geometry.attributes.position?.count ?? 0) / 3;
     });
-    $('scene-stats').textContent = `${meshes} meshes · ${Math.round(triangles).toLocaleString()} triangles`;
+    $('scene-stats').textContent = `${meshes} meshes · ${Math.round(triangles).toLocaleString()} triangles${bones ? ` · ${bones} bones` : ''}`;
   }
   function frame(view = 'iso') {
     const box = new THREE.Box3().setFromObject(model);
@@ -241,7 +244,7 @@ async function init() {
     $('rotation').value = 0; $('rotation-value').value = '0°';
     $('scale').value = 1; $('scale-value').value = '1.00×';
     $('model-name').textContent = name;
-    collectMaterials(); sceneStats(); frame();
+    collectMaterials(); sceneStats(); frame(); attachSkeleton();
     animations = clips; playing = false; action = null;
     mixer = clips.length ? new THREE.AnimationMixer(model) : null;
     $('animation-controls').hidden = !clips.length;
@@ -253,6 +256,21 @@ async function init() {
     updatePath();
     release(old);
   }
+  function attachSkeleton() {
+    if (skeletonHelper) { scene.remove(skeletonHelper); skeletonHelper.dispose(); skeletonHelper = null; }
+    const hasBones = model.getObjectByProperty('isBone', true) !== undefined;
+    $('skeleton').disabled = !hasBones;
+    if (!hasBones) return;
+    // Drawn over the surface so the rig stays readable inside the body.
+    skeletonHelper = new THREE.SkeletonHelper(model);
+    const colors = skeletonHelper.geometry.attributes.color;
+    const joint = new THREE.Color('#dfb578'), bone = new THREE.Color('#74bfa1');
+    for (let i = 0; i < colors.count; i++) (i % 2 ? joint : bone).toArray(colors.array, i * 3);
+    colors.needsUpdate = true;
+    skeletonHelper.visible = $('skeleton').checked;
+    scene.add(skeletonHelper);
+  }
+  $('skeleton').onchange = () => { if (skeletonHelper) skeletonHelper.visible = $('skeleton').checked; };
   function makeDemo() {
     const group = new THREE.Group();
     const gold = new THREE.MeshPhysicalMaterial({ color: '#d8a957', metalness: 1, roughness: 0.25, clearcoat: 0.4 });
@@ -261,16 +279,18 @@ async function init() {
     porcelain.name = 'Porcelain';
     const teal = new THREE.MeshPhysicalMaterial({ color: '#347c78', metalness: 0.35, roughness: 0.22 });
     teal.name = 'Petrol green';
-    const knot = new THREE.Mesh(new THREE.TorusKnotGeometry(0.62, 0.22, 120, 20), gold);
-    knot.position.set(0, 1.26, 0); knot.rotation.set(0.25, 0.15, 0.1);
-    const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.53, 48, 32), porcelain);
-    sphere.position.set(-1.28, 0.53, 0.35);
-    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.38, 48, 32), teal);
-    orb.position.set(1.25, 0.38, 0.55);
+    const { mesh: mannequin, clips } = createMannequin([gold, porcelain]);
+    mannequin.rotation.y = -0.35;
+    const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.45, 48, 32), porcelain);
+    sphere.position.set(-1.4, 0.45, 0.45);
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.34, 48, 32), teal);
+    orb.position.set(1.35, 0.34, 0.6);
     const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.32, 64), new THREE.MeshStandardMaterial({ color: '#52606b', roughness: 0.62 }));
     pedestal.material.name = 'Slate pedestal'; pedestal.position.set(0, 0.16, 0);
-    group.add(knot, sphere, orb, pedestal);
-    replaceModel(group, 'Studio collection');
+    group.add(mannequin, sphere, orb, pedestal);
+    replaceModel(group, 'Studio mannequin', clips);
+    // The rig is the point of the demo: start it moving unless the path tracer is showing a still.
+    if (mode === 'realtime') { playing = true; playClip(); $('play').textContent = 'Pause animation'; }
   }
   makeDemo();
   $('demo').onclick = () => { ++importSerial; makeDemo(); notify('Studio scene restored.'); };

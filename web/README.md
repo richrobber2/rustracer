@@ -27,9 +27,9 @@ Deploy the contents of `dist/` to any static web host. Asset paths are relative,
 - Adjust exposure, environment intensity, key light strength/direction, background color, ground visibility, and tone mapping.
 - Select individual materials and edit base color, roughness, and metallic response. Restore original materials; rotate or scale the model.
 - Import a `.glb`, or choose a folder containing one `.gltf` plus its relative `.bin` and texture files. Multiple loose companion files can also be selected or dropped. Directory imports preserve nested paths. Models are normalized to the studio and automatically framed. Files stay in memory on the user's device; external resource URLs are rejected.
-- Play/pause imported animation clips. Export the current viewport as a PNG; resolution follows the resolution slider and viewport size.
+- Play/pause animation clips, and toggle a skeleton overlay on any rigged model. Export the current viewport as a PNG; resolution follows the resolution slider and viewport size.
 
-The built-in studio demo needs no downloaded models. Imports support uncompressed glTF/GLB, with a 250 MB total file limit. Draco, Meshopt, and KTX2 assets need decoding before import. Material controls apply to standard/physical PBR materials. glTF extension and animation parity with the original Vulkan renderer is not guaranteed. Large models and complex path-traced scenes may be slow or exceed browser GPU limits.
+The built-in studio demo needs no downloaded models. It is a procedural mannequin: one skinned mesh on a 19-bone hierarchy, with vertices near each joint weighted across the bones on both sides so limbs bend continuously. Its walk, wave and idle clips drive every bone from one shared phase (opposite arm and leg swing together, the chest counter-rotates against the hips, the head holds its gaze), and the hips height is solved each frame so the lowest foot stays on the pedestal. Pause a clip and switch to path tracing to render that pose. Imports support uncompressed glTF/GLB, with a 250 MB total file limit. Draco, Meshopt, and KTX2 assets need decoding before import. Material controls apply to standard/physical PBR materials. glTF extension and animation parity with the original Vulkan renderer is not guaranteed. Large models and complex path-traced scenes may be slow or exceed browser GPU limits.
 
 ## Validate
 

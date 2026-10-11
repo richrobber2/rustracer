@@ -44,7 +44,7 @@
       </section>
       <section class="control-section">
         <h3><span>04</span> Model & materials</h3>
-        <div id="model-name" class="model-name">Studio collection</div>
+        <div id="model-name" class="model-name">Studio mannequin</div>
         <label class="select-label" for="material">Material<select id="material"></select></label>
         <label class="color-row" for="color">Base color<input id="color" type="color" value="#d8a957"></label>
         <label class="slider-label" for="roughness">Roughness <output id="roughness-value">0.25</output></label><input id="roughness" type="range" min="0" max="1" step="0.01" value="0.25">
@@ -52,6 +52,7 @@
         <button id="restore-materials" class="wide quiet">Restore original materials</button>
         <label class="slider-label" for="rotation">Model rotation <output id="rotation-value">0°</output></label><input id="rotation" type="range" min="0" max="360" step="1" value="0">
         <label class="slider-label" for="scale">Model scale <output id="scale-value">1.00×</output></label><input id="scale" type="range" min="0.25" max="2" step="0.05" value="1">
+        <label class="toggle" for="skeleton"><span>Show skeleton</span><input id="skeleton" type="checkbox" disabled></label>
         <div id="animation-controls" hidden><label class="select-label" for="animation">Animation<select id="animation"></select></label><button id="play" class="wide quiet">Play animation</button><p class="hint">Animation uses the interactive renderer.</p></div>
       </section>
       <div class="privacy-note"><span>◇</span> Models stay on your device.<br>No account. No upload.</div>
