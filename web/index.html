@@ -31,6 +31,12 @@
         <button id="focus-upper" class="wide quiet">Upper-back view</button>
         <button id="focus-abs" class="wide quiet">Abs view & physics</button>
         <p class="hint">Muscle bulk and fat padding edit the selected side independently. Both sides overwrites both values. They are separate shape and support approximations, relative to this base. Internal tissue layers and mass are not measured.</p>
+        <details class="genital-controls" open><summary>Skin appearance</summary>
+        <label class="select-label" for="skin-finish">Finish<select id="skin-finish"><option value="detailed" selected>Detailed skin</option><option value="original">Original skin</option></select></label>
+        <label class="slider-label" for="skin-detail">Pore detail <output id="skin-detail-value">65%</output></label><input id="skin-detail" type="range" min="0" max="1" step="0.05" value="0.65">
+        <label class="slider-label" for="skin-roughness">Surface roughness <output id="skin-roughness-value">0.62</output></label><input id="skin-roughness" type="range" min="0.4" max="0.85" step="0.01" value="0.62">
+        <button id="skin-reset" class="wide quiet">Reset skin appearance</button>
+        <p class="hint">Fine pore relief and varied roughness respond to the light in Skin view. Lower roughness increases shine. Original skin provides a comparison; clay and heat views keep their diagnostic surface.</p></details>
         <h3 class="saved-title">Character presets</h3>
         <div class="save-slots"><div><span>A</span><button data-save-character="a">Save A</button><button data-load-character="a">Load A</button></div><div><span>B</span><button data-save-character="b">Save B</button><button data-load-character="b">Load B</button></div></div>
         <div class="preset-row"><button id="character-export">Export preset</button><button id="character-import">Import preset</button></div>

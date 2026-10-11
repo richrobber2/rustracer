@@ -9,6 +9,7 @@ import { MuscleMotion, CagePose, MUSCLE_GROUPS } from './muscle-motion.js';
 import { SurfaceDeformer } from './surface-deformer.js';
 import { BodyMorph, PROPORTIONS, DEFAULT_PROPORTIONS, sanitizeProportions, readCharacter } from './body-proportions.js';
 import { addAnalSurface } from './anal-surface.js';
+import { SkinAppearance, DEFAULT_SKIN, sanitizeSkin } from './skin-material.js';
 
 const $ = id => document.getElementById(id);
 const PRESETS = {
@@ -69,7 +70,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
   }
   function detach() {
     serial++; endPointer();
-    if (current) current.mesh.material.map = current.skinMap;
+    if (current) { current.mesh.material.map = current.skinMap; current.skin.dispose(); }
     current = null; pendingShape = false; buttockMap.clear();
     $('tissue-fields').disabled = true; $('creator-fields').disabled = true; loadController?.abort();
     $('body-model').value = '';
@@ -91,12 +92,27 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
   function applyView() {
     if (!current) return;
     const view = $('tissue-view').value, material = current.mesh.material;
-    material.map = view === 'skin' ? current.skinMap : null;
-    material.color.set(view === 'skin' || view === 'heat' ? '#ffffff' : '#bca58a');
-    material.vertexColors = view === 'heat'; material.wireframe = view === 'wire';
+    current.skin.setView(view);
     material.needsUpdate = true;
     updateSurface(true, true);
   }
+  function displaySkin() {
+    const skin = current?.skin.settings || DEFAULT_SKIN;
+    $('skin-finish').value = skin.finish;
+    $('skin-detail').value = skin.detail; $('skin-detail-value').value = `${Math.round(skin.detail * 100)}%`;
+    $('skin-roughness').value = skin.roughness; $('skin-roughness-value').value = skin.roughness.toFixed(2);
+    $('skin-detail').disabled = $('skin-roughness').disabled = skin.finish === 'original';
+  }
+  function showSkin() { if ($('tissue-view').value !== 'skin') { $('tissue-view').value = 'skin'; applyView(); } }
+  for (const id of ['detail', 'roughness']) $(`skin-${id}`).oninput = () => {
+    if (!current) return;
+    requestRealtime(); current.skin.configure({ [id]: Number($(`skin-${id}`).value) }); showSkin(); displaySkin();
+  };
+  $('skin-finish').onchange = () => {
+    if (!current) return;
+    requestRealtime(); current.skin.configure({ finish: $('skin-finish').value }); showSkin(); displaySkin();
+  };
+  $('skin-reset').onclick = () => { if (current) { requestRealtime(); current.skin.configure(DEFAULT_SKIN); showSkin(); displaySkin(); } };
   function updateSurface(normals = false, force = false) {
     if (!current) return false;
     return current.deformer.update(current.system.offset, { normals, force, heat: $('tissue-view').value === 'heat' });
@@ -209,7 +225,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
     current.system.configure({ region: 2 }); $('tissue-region').value = '2';
     buttockMap.next = 0; setPanel('physics');
   };
-  const snapshot = () => ({ version: 1, sex: current.sex, proportions: { ...shape }, tissue: { ...current.system.parameters, ...parameterValues() }, motion: current.motion.snapshot() });
+  const snapshot = () => ({ version: 1, sex: current.sex, proportions: { ...shape }, tissue: { ...current.system.parameters, ...parameterValues() }, motion: current.motion.snapshot(), appearance: { ...current.skin.settings } });
   const restoreCharacter = value => { const character = readCharacter(value); load(character.sex, character); };
   for (const button of document.querySelectorAll('[data-save-character]')) button.onclick = () => {
     if (!current) return;
@@ -242,7 +258,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
     $('tissue-status').textContent = `Loading ${sex} body…`;
     $('creator-status').textContent = `Loading ${sex} anatomy…`;
     $('body-model').value = sex;
-    let gltf;
+    let gltf, skinAppearance;
     try {
       const modelUrl = new URL(`./bodies/${sex}.glb?v=2`, document.baseURI).href;
       const cageUrl = new URL(`./bodies/${sex}-cage.json?v=2`, document.baseURI).href;
@@ -256,6 +272,10 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
       gltf.scene.traverse(node => { if (node.geometry?.attributes._cage_index) mesh = node; });
       if (!mesh) throw new Error('This body has no tissue controls.');
       const data = addAnalSurface(mesh.geometry, sourceData);
+      const sourceMaterial = mesh.material;
+      skinAppearance = new SkinAppearance(sourceMaterial, renderer);
+      skinAppearance.configure(sanitizeSkin(character?.appearance));
+      mesh.material = skinAppearance.material; sourceMaterial.dispose();
       endPointer(); requestRealtime();
       const system = new TissueSystem(data);
       system.configure(character?.tissue || parameterValues());
@@ -277,14 +297,15 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
       color.setUsage(THREE.DynamicDrawUsage);
       geometry.computeBoundingSphere(); geometry.boundingSphere.radius += .15;
       if (mesh.isSkinnedMesh) { mesh.computeBoundingSphere(); mesh.boundingSphere.radius += .15; }
-      if (current) current.mesh.material.map = current.skinMap;
+      if (current) { current.mesh.material.map = current.skinMap; current.skin.dispose(); }
       const accessories = [];
       gltf.scene.traverse(node => { if (node.isMesh && node !== mesh) accessories.push({ mesh: node, morph: new BodyMorph(node.geometry.attributes.position.array, null, data) }); });
-      current = { object: gltf.scene, mesh, system, data, sex, motion, pose, skinMap: mesh.material.map,
+      current = { object: gltf.scene, mesh, system, data, sex, motion, pose, skin: skinAppearance, skinMap: mesh.material.map,
         deformer: new SurfaceDeformer(geometry, system.count),
         morph: new BodyMorph(geometry.attributes.position.array, geometry.attributes._genital_weight.array, data, geometry.attributes._anal_weight.array),
         cageMorph: new BodyMorph(data.positions, data.genitalWeights, data, data.analWeights), accessories };
       applyShape();
+      displaySkin();
       $('motion-side').value = String(motion.side); $('motion-demo').value = motion.demo;
       $('motion-strength').value = motion.strength; $('motion-speed').value = motion.speed;
       displayMotionControls();
@@ -305,7 +326,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
     } catch (error) {
       if (request !== serial || error.name === 'AbortError') return;
       $('tissue-fields').disabled = !current; $('creator-fields').disabled = !current;
-      if (gltf && current?.object !== gltf.scene) disposeObject(gltf.scene);
+      if (gltf && current?.object !== gltf.scene) { skinAppearance?.dispose(); disposeObject(gltf.scene); }
       $('body-model').value = current?.sex || '';
       $('tissue-status').textContent = `Could not load body: ${error.message}`;
       $('creator-status').textContent = `Could not load body: ${error.message}`;

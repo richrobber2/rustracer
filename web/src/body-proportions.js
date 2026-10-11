@@ -1,5 +1,6 @@
 // Smooth rest-shape edits for adult character proportions. No change of age.
 import { analField } from './anal-surface.js';
+import { sanitizeSkin } from './skin-material.js';
 export const PROPORTIONS = [
   { id: 'height', label: 'Height', min: .88, max: 1.16 },
   { id: 'shoulders', label: 'Shoulder breadth', min: .8, max: 1.25 },
@@ -75,5 +76,6 @@ export function readCharacter(value) {
   if (!value || value.version !== 1 || !['male', 'female'].includes(value.sex)) throw new Error('Unsupported character preset');
   const result = { version: 1, sex: value.sex, proportions: sanitizeProportions(value.proportions), tissue: value.tissue && typeof value.tissue === 'object' ? value.tissue : {} };
   if (value.motion && typeof value.motion === 'object') result.motion = value.motion;
+  if (value.appearance && typeof value.appearance === 'object') result.appearance = sanitizeSkin(value.appearance);
   return result;
 }

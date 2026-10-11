@@ -50,6 +50,19 @@ test('actual map controls capture a displaced sample, cancel, and release on pan
   let bodyObject;
   const lab = createBodyLab({ renderer, camera: new THREE.PerspectiveCamera(), controls, onReady(object) { bodyObject = object; }, requestRealtime() {}, notify(message) { notifications.push(message); } });
   await lab.load('female'); assert.ok(lab.active, notifications.join('; '));
+  let skinMesh; bodyObject.traverse(n => { if (n.geometry?.attributes._cage_index) skinMesh = n; });
+  assert.ok(skinMesh.material.normalMap && skinMesh.material.roughnessMap);
+  const colorMap = skinMesh.material.map;
+  elements.get('skin-finish').value = 'original'; elements.get('skin-finish').onchange();
+  assert.equal(skinMesh.material.normalMap, null); assert.equal(skinMesh.material.map, colorMap);
+  assert.ok(elements.get('skin-detail').disabled);
+  elements.get('skin-reset').onclick(); assert.ok(skinMesh.material.normalMap); assert.equal(elements.get('skin-detail').disabled, false);
+  elements.get('tissue-view').value = 'heat'; elements.get('tissue-view').onchange();
+  assert.equal(skinMesh.material.normalMap, null); assert.equal(skinMesh.material.roughnessMap, null);
+  elements.get('skin-detail').value = '.9'; elements.get('skin-detail').oninput();
+  elements.get('skin-roughness').value = '.48'; elements.get('skin-roughness').oninput();
+  assert.equal(elements.get('tissue-view').value, 'skin'); assert.equal(elements.get('skin-detail-value').value, '90%');
+  assert.equal(skinMesh.material.roughness, .48); assert.ok(Math.abs(skinMesh.material.normalScale.x - .27) < 1e-6);
   const data = JSON.parse(fs.readFileSync(new URL('../public/bodies/female-cage.json', import.meta.url))), system = new TissueSystem(data);
   for (let f = 0; f < 20; f++) { lab.update(1 / 60, f * 1000 / 60); system.step(1 / 60); }
   const projection = new ButtockMap(mapCanvas, { textContent: '' }, 'upper'); projection.setSystem(system);
