@@ -292,6 +292,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   }, true);
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(type, event => {
     if (pointer !== event.pointerId) return;
+    if (event.cancelable) event.preventDefault();
     event.stopImmediatePropagation(); endPointer(event);
   }, true);
   window.addEventListener('blur', () => endPointer());
