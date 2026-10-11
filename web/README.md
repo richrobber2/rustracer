@@ -85,3 +85,13 @@ npm test
 Browser tests use Chromium at `/usr/bin/chromium` (override with `CHROMIUM_PATH`) and software WebGL through SwiftShader. When a supported browser environment is available, they validate the studio's rendered pixels, material/camera controls, PNG output, local glTF companions, binary GLB imports, missing/remote resource handling, progressive sample accumulation, and mobile layout. Device performance and body-lab interaction still require a browser check. The existing native Rust tests are independent and retain their known missing-asset/path failures.
 
 In the managed cloud environment, use `npm --cache /workspace/tooling/npm-cache ci` because the default npm cache directory is not writable. The environment draft includes installation and startup instructions for both workflows. No secret values are required.
+
+## Skin patch research prototype
+
+Open **Skin study** from the header (`skin.html`). This isolated experiment leaves the body solver unchanged. A 100-particle, 288-tetrahedron patch has an anchored base, three layers of interior cells, compliant edge constraints, a stiffer top surface, and optional total-volume XPBD preservation. Signed top-surface load supports press/pull; release removes the load and reset restores rest geometry. Fixed 1/240 s substeps with four iterations update displacement, volume change, and inverted-cell readouts.
+
+Global volume preservation allows local compression and surrounding expansion. It does not enforce cell-wise incompressibility or prevent inversion. No collision, sliding, bending-specific energy, anisotropy, or biological stress relaxation is implemented. Parameters are illustrative and uncalibrated; this is not anatomical training ground truth.
+
+References: [XPBD](https://mmacklin.com/xpbd.pdf), [Small Steps](https://mmacklin.com/smallsteps.pdf), [Volume Preserving Simulation of Soft Tissue with Skin](https://arxiv.org/abs/2109.01170). The prototype uses compliant constraints and total volume preservation, not the tissue paper's full material model.
+
+Tests cover rest volume, compression comparison, release recovery, pull, fixed base, timestep partitioning, and control extremes. Cloud Node CPU review: 60 warmup frames, 180 measured 60 Hz updates with load −0.04 N; mean 5.38 ms, p95 6.63 ms. These timings exclude rendering and establish no browser or phone FPS. Browser/touch/GPU validation remains unavailable.
