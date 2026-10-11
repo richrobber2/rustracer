@@ -74,7 +74,7 @@ node checks/body-performance.mjs
 Model loading, rig binding, cage weights, welded anatomy, reversible proportions, preset validation, selective normals, sleep/wake behavior, simulation recovery/stability, and rendering scheduler checks without a browser:
 
 ```sh
-node --test checks/*.test.mjs
+npm run check
 ```
 
 Full browser/rendering checks when Chromium is available:
@@ -83,7 +83,7 @@ Full browser/rendering checks when Chromium is available:
 npm test
 ```
 
-Browser tests use Chromium at `/usr/bin/chromium` (override with `CHROMIUM_PATH`) and software WebGL through SwiftShader. When a supported browser environment is available, they validate the studio's rendered pixels, material/camera controls, PNG output, local glTF companions, binary GLB imports, missing/remote resource handling, progressive sample accumulation, and mobile layout. Device performance and body-lab interaction still require a browser check. The existing native Rust tests are independent and retain their known missing-asset/path failures.
+Browser tests use `CHROMIUM_PATH` when set, then `/usr/bin/chromium` or `/opt/pw-browsers/chromium` if present, and otherwise Playwright's own Chromium (`npx playwright install chromium`), and software WebGL through SwiftShader. When a supported browser environment is available, they validate the studio's rendered pixels, material/camera controls, PNG output, local glTF companions, binary GLB imports, missing/remote resource handling, progressive sample accumulation, and mobile layout. Device performance and body-lab interaction still require a browser check. The existing native Rust tests are independent and retain their known missing-asset/path failures.
 
 In the managed cloud environment, use `npm --cache /workspace/tooling/npm-cache ci` because the default npm cache directory is not writable. The environment draft includes installation and startup instructions for both workflows. No secret values are required.
 

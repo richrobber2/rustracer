@@ -126,7 +126,11 @@ export class MuscleMotion {
         j.velocity = clamp(j.velocity, -3, 3);
         const old = j.angle; j.angle = clamp(old + j.velocity * DT, j.min, j.max);
         if ((j.angle === j.min && j.velocity < 0) || (j.angle === j.max && j.velocity > 0)) j.velocity = 0;
-        if (!a && !b && Math.abs(j.angle) < 1e-7 && Math.abs(j.velocity) < 1e-7) j.angle = j.velocity = 0;
+        // Snap onto the static equilibrium once activation has settled, so a
+        // held pose stops reporting sub-visible creep that keeps tissue awake.
+        const settled = j.activation[0] === j.excitation[0] && j.activation[1] === j.excitation[1];
+        const rest = clamp(j.moment / (j.stiffness * (1 + .8 * (a + b))), j.min, j.max);
+        if (settled && Math.abs(j.angle - rest) < 1e-5 && Math.abs(j.velocity) < 1e-4) { j.angle = rest; j.velocity = 0; }
         changed ||= Math.abs(old - j.angle) > 1e-9;
       }
     }

@@ -36,11 +36,11 @@ async function open(page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Studio demo', exact: true }).click();
   await expect(page.locator('#scene-stats')).toContainText('4 meshes');
-  await expect.poll(() => page.locator('canvas').getAttribute('data-frames')).not.toBeNull();
+  await expect.poll(() => page.locator('#canvas-host canvas').getAttribute('data-frames')).not.toBeNull();
   return errors;
 }
 async function pixels(page) {
-  return page.locator('canvas').evaluate((canvas) => {
+  return page.locator('#canvas-host canvas').evaluate((canvas) => {
     const copy = document.createElement('canvas'); copy.width = 160; copy.height = 120;
     const context = copy.getContext('2d'); context.drawImage(canvas, 0, 0, 160, 120);
     const data = context.getImageData(0, 0, 160, 120).data;

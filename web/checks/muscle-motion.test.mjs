@@ -119,3 +119,17 @@ for (const sex of ['female', 'male']) {
     assert.equal(tested, 20);
   });
 }
+
+test('a held muscle pose stops moving so the tissue can sleep', async () => {
+  const { system, motion, pose } = await body('female');
+  motion.setExcitation('core', 0, [1, 0]); motion.setExcitation('grip', 2, [1, 0]);
+  let lastMoved = 0;
+  for (let f = 1; f <= 60 * 8; f++) {
+    const moved = motion.step(1 / 60), posed = pose.refresh(motion.version);
+    if (motion.tissueActivation(system) || moved || posed) system.wake();
+    system.step(1 / 60); if (moved) lastMoved = f / 60;
+  }
+  assert.ok(lastMoved < 5, `joints still creeping at ${lastMoved} s`);
+  assert.ok(system.sleeping);
+  for (const j of motion.joints) assert.equal(j.velocity, 0);
+});
