@@ -27,7 +27,7 @@ Use the **Create**, **Physics**, and **Render** tabs to move between body propor
 - Create: female/male base; height, shoulders, chest, waist, hips, thighs, genital length and width. Sliders describe percentages of the base shape. Randomize/reset the proportions, or focus the camera on the pelvis.
 - Presets: save/load slots A and B on the current device, or export/import a versioned JSON preset with proportions and tissue settings. Import validation clamps numeric fields and rejects unsupported versions. These presets do not contain personal images or uploaded models.
 - Physics: genital tissue is a separate selectable force region with its own compliance and damping. Larger proportional geometry changes support and permitted displacement. Press, pull, pulse, and vibration work on the selected region. Parameters are illustrative, not measurements of human tissue.
-- Proportion edits transform the rest surface, eye meshes, and simulation cage together; they reset existing deformation. The fixed-pose skeleton remains a base rig. **Download base GLB** preserves that base; **Export preset** preserves creator changes.
+- Proportion edits transform the rest surface, eye meshes, and simulation cage together. Bilateral edits reset deformation; unilateral muscle/fat edits preserve motion on an unchanged opposite side. The fixed-pose skeleton remains a base rig. **Download base GLB** preserves that base; **Export preset** preserves creator changes.
 
 ## Controls
 
@@ -107,3 +107,11 @@ Gluteal muscle bulk (75–140%) and buttock fat padding (50–175%) are independ
 The Physics tab shows a rear 2D projection of buttock cage samples, colored by displacement magnitude from the edited rest shape. It uses the 3D heat view's numerical palette and 0–50 mm scale. Each dot is a sampled simulation point, not a continuous anatomical UV map. Peak/mean readings update during touch, pulses, settling, pause, and reset. Drawing is throttled to 10 Hz and skipped when the Physics tab is hidden. It does not display strain, stress, pressure, activation, or local volume error; those require additional model components.
 
 Three composition/map checks cover both body models, combined slider extremes, reversible rest shape, unaffected front geometry, bounded response, legacy preset round trips, paused-state synchronization, reset, and update throttling. Browser/touch visual QA remains unavailable.
+
+## Independent buttock sides
+
+In Create, **Muscle / fat edits** chooses rear-view left (+X), rear-view right (−X), or both. The muscle/fat sliders default to editing rear-view left; selecting a side displays its saved value. Both sides overwrites both side overrides. Other proportions remain bilateral. Version-1 JSON presets retain separate side overrides and the Physics-side selection. A unilateral rest edit resets the edited side and preserves offsets/velocities on opposite-side particles whose rest positions did not change.
+
+In Physics, **Side** defaults to Auto, which follows the last buttock touched. The brush stays on the initial side even at maximum radius; dragging does not switch sides. Select rear-view left/right for pulses, vibration, and muscle support, or explicitly select both. With Buttocks selected, Auto requires touching a side before a pulse or vibration. Gravity still acts independently on both sides.
+
+Cross-center hip spring coupling is removed, and runtime skin weights that include buttock particles are normalized onto the vertex's own side. The shared skeleton, rest surface, and UV seam welding remain intact; base GLB assets are unchanged. Regression checks use both real GLBs, maximum-radius press/pull, explicit pulses/vibration/both mode, asymmetric presets/shapes, preserved opposite-side settling, normalized skin weights, and welded seams. These changes isolate this illustrative surface model, not a calibrated model of pelvic force transmission. Browser/touch visual testing remains unavailable.

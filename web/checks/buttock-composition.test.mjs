@@ -11,7 +11,7 @@ for (const sex of ['female','male']) test(`${sex} composition remains reversible
   const shape={...DEFAULT_PROPORTIONS,gluteMuscle:muscle,buttFat:fat};
   const rest=morph.apply(shape).slice();assert.ok(rest.every(Number.isFinite));
   for(let i=0;i<rest.length/3;i++)if(morph.base[i*3+2]>=0)assert.deepEqual(Array.from(rest.slice(i*3,i*3+3)),Array.from(morph.base.slice(i*3,i*3+3)));
-  const s=new TissueSystem(d);s.configure({buttMuscle:muscle,buttFat:fat,region:9,strength:3});s.setRest(rest);
+  const s=new TissueSystem(d);s.configure({buttMuscle:muscle,buttFat:fat,region:9,strength:3,buttSide:2});s.setRest(rest);
   assert.ok(buttockSamples(s).every(p=>p.mm===0));s.impulse();for(let i=0;i<90;i++)s.step(1/60);
   const samples=buttockSamples(s);assert.ok(samples.length>10);assert.ok(samples.some(p=>p.mm>0));
   for(const p of samples){assert.ok(Number.isFinite(p.mm));assert.ok(p.mm<=s.limits[p.id]*1000+1e-4);}

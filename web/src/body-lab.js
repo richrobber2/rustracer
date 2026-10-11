@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { TissueSystem } from './tissue-physics.js';
+import { isolateButtockWeights } from './buttock-sides.js';
 import { ButtockMap } from './buttock-map.js';
 import { SurfaceDeformer } from './surface-deformer.js';
 import { BodyMorph, PROPORTIONS, DEFAULT_PROPORTIONS, sanitizeProportions, readCharacter } from './body-proportions.js';
@@ -25,13 +26,14 @@ function disposeObject(object) {
 }
 
 export function createBodyLab({ renderer, camera, controls, onReady, requestRealtime, notify }) {
+  let pendingSide = 0;
   let serial = 0, current = null, pointer = null, tool = 'orbit', pendingShape = false, shape = { ...DEFAULT_PROPORTIONS }, loadController = null, nextNormals = 0, averageCpu = 0;
   const raycaster = new THREE.Raycaster(), screen = new THREE.Vector2();
   const plane = new THREE.Plane(), worldPoint = new THREE.Vector3(), localPoint = new THREE.Vector3(), normal = new THREE.Vector3();
   const canvas = renderer.domElement;
   const buttockMap = new ButtockMap($('buttock-map'), $('buttock-map-status'));
   const settings = ['stiffness', 'damping', 'gravity', 'tension', 'radius', 'strength', 'genitalCompliance', 'genitalDamping', 'buttCompliance', 'buttDamping'];
-  const parameterValues = () => Object.fromEntries(settings.map(id => [id, Number($(`tissue-${id}`).value)]));
+  const parameterValues = () => ({ ...Object.fromEntries(settings.map(id => [id, Number($(`tissue-${id}`).value)])), buttSide: Number($('tissue-buttSide').value) });
   function setButtons() {
     $('tissue-pause').textContent = current?.system.paused ? 'Resume physics' : 'Pause physics';
     $('tissue-vibrate').setAttribute('aria-pressed', String(Boolean(current?.system.vibration)));
@@ -88,18 +90,25 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
     if (!current) return false;
     return current.deformer.update(current.system.offset, { normals, force, heat: $('tissue-view').value === 'heat' });
   }
+  function shapeValue(id) {
+    const side = $('shape-buttSide').value;
+    return ['gluteMuscle', 'buttFat'].includes(id) && side !== 'Both' ? shape[id + side] ?? shape[id] : shape[id];
+  }
   function displayShape() {
     for (const p of PROPORTIONS) {
-      $(`shape-${p.id}`).value = shape[p.id];
-      $(`shape-${p.id}-value`).value = `${Math.round(shape[p.id] * 100)}%`;
+      $(`shape-${p.id}`).value = shapeValue(p.id);
+      $(`shape-${p.id}-value`).value = `${Math.round(shapeValue(p.id) * 100)}%`;
     }
   }
   function applyShape() {
     if (!current) return;
+    const changedSide = pendingSide; pendingSide = 0;
     endPointer(); pendingShape = false;
     current.deformer.setRest(current.morph.apply(shape));
-    current.system.configure({ buttMuscle: shape.gluteMuscle, buttFat: shape.buttFat });
-    current.system.setRest(current.cageMorph.apply(shape), shape.height * Math.cbrt(shape.genitalLength * shape.genitalWidth ** 2));
+    current.system.configure({ buttMuscle: 1, buttFat: 1,
+      buttMuscleLeft: shape.gluteMuscleLeft ?? shape.gluteMuscle, buttMuscleRight: shape.gluteMuscleRight ?? shape.gluteMuscle,
+      buttFatLeft: shape.buttFatLeft ?? shape.buttFat, buttFatRight: shape.buttFatRight ?? shape.buttFat });
+    current.system.setRest(current.cageMorph.apply(shape), shape.height * Math.cbrt(shape.genitalLength * shape.genitalWidth ** 2), changedSide);
     for (const { mesh, morph } of current.accessories) {
       mesh.geometry.attributes.position.array.set(morph.apply(shape));
       mesh.geometry.attributes.position.needsUpdate = true;
@@ -136,11 +145,12 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
     const label = document.createElement('label'); label.className = 'slider-label'; label.htmlFor = `shape-${p.id}`; label.textContent = p.label;
     const output = document.createElement('output'); output.id = `shape-${p.id}-value`; output.value = '100%'; label.append(output);
     const input = document.createElement('input'); input.id = `shape-${p.id}`; input.type = 'range'; input.min = p.min; input.max = p.max; input.step = '.01'; input.value = '1';
-    input.oninput = () => { shape[p.id] = Number(input.value); output.value = `${Math.round(shape[p.id] * 100)}%`; pendingShape = true; requestRealtime(); };
+    input.oninput = () => { shape[p.id] = Number(input.value); output.value = `${Math.round(shapeValue(p.id) * 100)}%`; pendingShape = true; requestRealtime(); };
     row.append(label, input); $('proportion-controls').append(row);
   }
-  $('proportions-reset').onclick = () => { shape = { ...DEFAULT_PROPORTIONS }; displayShape(); pendingShape = true; requestRealtime(); };
-  $('proportions-random').onclick = () => { shape = Object.fromEntries(PROPORTIONS.map(p => [p.id, Math.round((p.min + Math.random() * (p.max - p.min)) * 100) / 100])); displayShape(); pendingShape = true; requestRealtime(); };
+  $('shape-buttSide').onchange = displayShape;
+  $('proportions-reset').onclick = () => { pendingSide = 0; shape = { ...DEFAULT_PROPORTIONS }; displayShape(); pendingShape = true; requestRealtime(); };
+  $('proportions-random').onclick = () => { pendingSide = 0; shape = Object.fromEntries(PROPORTIONS.map(p => [p.id, Math.round((p.min + Math.random() * (p.max - p.min)) * 100) / 100])); displayShape(); pendingShape = true; requestRealtime(); };
   function focusRegion(region, rear = false) {
     if (!current) return;
     if (pendingShape) applyShape();
@@ -205,8 +215,10 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
         const value = system.parameters[id]; $(`tissue-${id}`).value = value;
         $(`tissue-${id}-value`).value = formatParameter(id, value);
       }
+      $('tissue-buttSide').value = String(system.parameters.buttSide);
       shape = sanitizeProportions(character?.proportions); displayShape();
       const geometry = mesh.geometry;
+      isolateButtockWeights(geometry, system);
       const color = new THREE.Float32BufferAttribute(new Float32Array(geometry.attributes.position.count * 3), 3);
       geometry.setAttribute('color', color);
       geometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
@@ -264,11 +276,17 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
     for (const [id, value] of Object.entries(preset)) { $(`tissue-${id}`).value = value; $(`tissue-${id}`).oninput(); }
     $('tissue-preset').value = name;
   };
+  $('tissue-buttSide').onchange = () => { endPointer(); current?.system.configure({ buttSide: Number($('tissue-buttSide').value) }); resume(); };
   $('tissue-region').onchange = () => current?.system.configure({ region: Number($('tissue-region').value) });
   $('tissue-pause').onclick = () => current?.system.paused ? resume() : pause();
   $('tissue-reset').onclick = () => { if (current) { endPointer(); current.system.reset(); current.system.vibration = false; setButtons(); updateSurface(true); requestRealtime(); } };
-  $('tissue-impulse').onclick = () => { resume(); current?.system.impulse(); };
-  $('tissue-vibrate').onclick = () => { if (current) { resume(); current.system.vibration = !current.system.vibration; setButtons(); } };
+  $('tissue-impulse').onclick = () => {
+    if (current?.system.parameters.region === 9 && !current.system.parameters.buttSide && !current.system.lastButtSide) { notify('Touch one buttock first, or choose a side for the pulse.'); return; }
+    resume(); current?.system.impulse();
+  };
+  $('tissue-vibrate').onclick = () => { if (current) {
+    if (!current.system.vibration && current.system.parameters.region === 9 && !current.system.parameters.buttSide && !current.system.lastButtSide) { notify('Touch one buttock first, or choose a side for vibration.'); return; }
+    resume(); current.system.vibration = !current.system.vibration; setButtons(); } };
   $('tissue-view').onchange = () => { requestRealtime(); applyView(); };
   function updateRay(event) {
     const r = canvas.getBoundingClientRect();

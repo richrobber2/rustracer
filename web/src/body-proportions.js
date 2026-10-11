@@ -14,8 +14,13 @@ export const PROPORTIONS = [
 export const DEFAULT_PROPORTIONS = { buttocks: 1, ...Object.fromEntries(PROPORTIONS.map(p => [p.id, 1])) };
 export function sanitizeProportions(value = {}) {
   // Keep legacy fullness from existing presets; new controls start neutral.
-  return { buttocks: Number.isFinite(value.buttocks) ? Math.max(.75, Math.min(1.4, value.buttocks)) : 1,
+  const result = { buttocks: Number.isFinite(value.buttocks) ? Math.max(.75, Math.min(1.4, value.buttocks)) : 1,
     ...Object.fromEntries(PROPORTIONS.map(p => [p.id, Number.isFinite(value[p.id]) ? Math.max(p.min, Math.min(p.max, value[p.id])) : 1])) };
+  for (const side of ['Left', 'Right']) for (const id of ['gluteMuscle', 'buttFat']) {
+    const spec = PROPORTIONS.find(p => p.id === id), key = id + side;
+    if (Number.isFinite(value[key])) result[key] = Math.max(spec.min, Math.min(spec.max, value[key]));
+  }
+  return result;
 }
 const bell = (x, center, width) => Math.exp(-(((x - center) / width) ** 2));
 export class BodyMorph {
@@ -42,11 +47,13 @@ export class BodyMorph {
     const p = sanitizeProportions(input), b = this.base, o = this.result, f = this.fields;
     for (let i = 0; i < b.length / 3; i++) {
       const j = i * 3, k = i * 7, g = this.genital[i];
+      const side = b[j] > 0 ? 'Left' : 'Right';
+      const muscle = p['gluteMuscle' + side] ?? p.gluteMuscle, fat = p['buttFat' + side] ?? p.buttFat;
       const breadth = 1 + (p.shoulders - 1) * f[k] + (p.chest - 1) * .35 * f[k + 1] + (p.waist - 1) * f[k + 2] + (p.hips - 1) * f[k + 3] + (p.thighs - 1) * .35 * f[k + 4];
       const depth = 1 + (p.chest - 1) * f[k + 1] + (p.waist - 1) * f[k + 2] + (p.hips - 1) * .45 * f[k + 3] + (p.thighs - 1) * f[k + 4];
       o[j] = b[j] * breadth * (1 + (p.genitalWidth - 1) * g);
       o[j + 1] = (b[j + 1] + (b[j + 1] - this.anchor[1]) * (p.genitalLength - 1) * g) * p.height;
-      o[j + 2] = (b[j + 2] + (b[j + 2] - this.anchor[2]) * (p.genitalWidth - 1) * g) * depth * (1 + (p.buttocks - 1) * f[k + 5]) * (1 + .65 * (p.gluteMuscle - 1) * f[k + 5] + .35 * (p.buttFat - 1) * f[k + 6]);
+      o[j + 2] = (b[j + 2] + (b[j + 2] - this.anchor[2]) * (p.genitalWidth - 1) * g) * depth * (1 + (p.buttocks - 1) * f[k + 5]) * (1 + .65 * (muscle - 1) * f[k + 5] + .35 * (fat - 1) * f[k + 6]);
     }
     return o;
   }
