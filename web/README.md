@@ -95,3 +95,7 @@ Global volume preservation allows local compression and surrounding expansion. I
 References: [XPBD](https://mmacklin.com/xpbd.pdf), [Small Steps](https://mmacklin.com/smallsteps.pdf), [Volume Preserving Simulation of Soft Tissue with Skin](https://arxiv.org/abs/2109.01170). The prototype uses compliant constraints and total volume preservation, not the tissue paper's full material model.
 
 Tests cover rest volume, compression comparison, release recovery, pull, fixed base, timestep partitioning, and control extremes. Cloud Node CPU review: 60 warmup frames, 180 measured 60 Hz updates with load −0.04 N; mean 5.38 ms, p95 6.63 ms. These timings exclude rendering and establish no browser or phone FPS. Browser/touch/GPU validation remains unavailable.
+
+## Buttock response
+
+The creator adds buttock fullness (75–140% of the base) and a Rear view shortcut. Rear-facing hip cage particles gain a separate Buttocks interaction region, independent compliance and damping, and firmer illustrative attachment support near the midline and upper pelvis. Muscle support also affects this region. Saved presets include these controls; older version-1 presets default missing proportions to the base value. This remains an anchored surface approximation: no internal gluteal anatomy, bone inertia, volume preservation, or contact/self-collision is added to the body solver. Two body-specific checks verify regional selection, compliance response, recovery, bounded extremes, and reversible posterior shape edits.

@@ -26,7 +26,7 @@
         <label class="select-label" for="body-model">Body<select id="body-model"><option value="" disabled>Choose a body</option><option value="female" selected>Female</option><option value="male">Male</option></select></label>
         <fieldset id="creator-fields" disabled><div id="proportion-controls"></div>
         <p class="hint">Values are relative to the base body. Editing proportions resets tissue to its new resting shape.</p>
-        <div class="preset-row"><button id="proportions-reset">Reset shape</button><button id="proportions-random">Randomize</button><button id="focus-pelvis">Focus pelvis</button></div>
+        <div class="preset-row"><button id="proportions-reset">Reset shape</button><button id="proportions-random">Randomize</button><button id="focus-pelvis">Focus pelvis</button><button id="focus-buttocks">Rear view</button></div>
         <h3 class="saved-title">Character presets</h3>
         <div class="save-slots"><div><span>A</span><button data-save-character="a">Save A</button><button data-load-character="a">Load A</button></div><div><span>B</span><button data-save-character="b">Save B</button><button data-load-character="b">Load B</button></div></div>
         <div class="preset-row"><button id="character-export">Export preset</button><button id="character-import">Import preset</button></div>
@@ -46,6 +46,10 @@
           <label class="slider-label" for="tissue-gravity">Gravity <output id="tissue-gravity-value">0.3×</output></label><input id="tissue-gravity" type="range" min="0" max="2" step="0.1" value="0.3">
           <label class="slider-label" for="tissue-radius">Touch radius <output id="tissue-radius-value">10 cm</output></label><input id="tissue-radius" type="range" min="0.03" max="0.25" step="0.01" value="0.1">
           <label class="slider-label" for="tissue-strength">Touch strength <output id="tissue-strength-value">1.0×</output></label><input id="tissue-strength" type="range" min="0.1" max="3" step="0.1" value="1">
+          <details class="genital-controls" open><summary>Buttock tissue response</summary>
+          <label class="slider-label" for="tissue-buttCompliance">Compliance <output id="tissue-buttCompliance-value">1.0×</output></label><input id="tissue-buttCompliance" type="range" min="0.5" max="2" step="0.05" value="1">
+          <label class="slider-label" for="tissue-buttDamping">Damping <output id="tissue-buttDamping-value">50%</output></label><input id="tissue-buttDamping" type="range" min="0" max="1" step="0.05" value="0.5">
+          <p class="hint">Firmer support near the midline and upper pelvis; softer outer tissue. Choose Buttocks to isolate touch and muscle support.</p></details>
           <details class="genital-controls" open><summary>Genital tissue response</summary>
           <label class="slider-label" for="tissue-genitalCompliance">Compliance <output id="tissue-genitalCompliance-value">1.0×</output></label><input id="tissue-genitalCompliance" type="range" min="0.5" max="2" step="0.05" value="1">
           <label class="slider-label" for="tissue-genitalDamping">Damping <output id="tissue-genitalDamping-value">50%</output></label><input id="tissue-genitalDamping" type="range" min="0" max="1" step="0.05" value="0.5">

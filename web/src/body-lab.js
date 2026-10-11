@@ -28,7 +28,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   const raycaster = new THREE.Raycaster(), screen = new THREE.Vector2();
   const plane = new THREE.Plane(), worldPoint = new THREE.Vector3(), localPoint = new THREE.Vector3(), normal = new THREE.Vector3();
   const canvas = renderer.domElement;
-  const settings = ['stiffness', 'damping', 'gravity', 'tension', 'radius', 'strength', 'genitalCompliance', 'genitalDamping'];
+  const settings = ['stiffness', 'damping', 'gravity', 'tension', 'radius', 'strength', 'genitalCompliance', 'genitalDamping', 'buttCompliance', 'buttDamping'];
   const parameterValues = () => Object.fromEntries(settings.map(id => [id, Number($(`tissue-${id}`).value)]));
   function setButtons() {
     $('tissue-pause').textContent = current?.system.paused ? 'Resume physics' : 'Pause physics';
@@ -137,15 +137,17 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   }
   $('proportions-reset').onclick = () => { shape = { ...DEFAULT_PROPORTIONS }; displayShape(); pendingShape = true; requestRealtime(); };
   $('proportions-random').onclick = () => { shape = Object.fromEntries(PROPORTIONS.map(p => [p.id, Math.round((p.min + Math.random() * (p.max - p.min)) * 100) / 100])); displayShape(); pendingShape = true; requestRealtime(); };
-  $('focus-pelvis').onclick = () => {
+  function focusRegion(region, rear = false) {
     if (!current) return;
     if (pendingShape) applyShape();
     const p = new THREE.Vector3(), a = current.system.rest; let count = 0;
-    for (let i = 0; i < current.system.count; i++) if (current.system.regions[i] === 8) { p.x += a[i * 3]; p.y += a[i * 3 + 1]; p.z += a[i * 3 + 2]; count++; }
+    for (let i = 0; i < current.system.count; i++) if (current.system.regions[i] === region) { p.x += a[i * 3]; p.y += a[i * 3 + 1]; p.z += a[i * 3 + 2]; count++; }
     p.multiplyScalar(1 / Math.max(1, count)); current.mesh.localToWorld(p);
-    const direction = new THREE.Vector3(0, .08, .55).transformDirection(current.mesh.matrixWorld).multiplyScalar(.55 * shape.height * current.object.scale.x);
+    const direction = new THREE.Vector3(0, .08, rear ? -.55 : .55).transformDirection(current.mesh.matrixWorld).multiplyScalar(.55 * shape.height * current.object.scale.x);
     controls.target.copy(p); camera.position.copy(p).add(direction); camera.lookAt(p); controls.update();
-  };
+  }
+  $('focus-pelvis').onclick = () => focusRegion(8);
+  $('focus-buttocks').onclick = () => focusRegion(9, true);
   const snapshot = () => ({ version: 1, sex: current.sex, proportions: { ...shape }, tissue: { ...current.system.parameters, ...parameterValues() } });
   const restoreCharacter = value => { const character = readCharacter(value); load(character.sex, character); };
   for (const button of document.querySelectorAll('[data-save-character]')) button.onclick = () => {
@@ -219,7 +221,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
 
       onReady(gltf.scene, `${sex === 'female' ? 'Female' : 'Male'} · soft-tissue study`);
       $('tissue-fields').disabled = false; $('creator-fields').disabled = false;
-      $('tissue-region').replaceChildren(...['Whole body', ...data.regionNames].map((label, index) => {
+      $('tissue-region').replaceChildren(...['Whole body', ...system.regionNames].map((label, index) => {
         const option = document.createElement('option'); option.value = String(index - 1); option.textContent = label; return option;
       }));
       $('tissue-region').value = String(system.parameters.region);
@@ -243,7 +245,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   for (const button of document.querySelectorAll('[data-body]')) button.onclick = () => load(button.dataset.body);
   for (const button of document.querySelectorAll('[data-tissue-tool]')) button.onclick = () => setTool(button.dataset.tissueTool);
   function formatParameter(id, value) {
-    return id === 'radius' ? `${Math.round(value * 100)} cm` : id === 'stiffness' ? String(value) : ['damping', 'tension', 'genitalDamping'].includes(id) ? `${Math.round(value * 100)}%` : `${value.toFixed(1)}×`;
+    return id === 'radius' ? `${Math.round(value * 100)} cm` : id === 'stiffness' ? String(value) : ['damping', 'tension', 'genitalDamping', 'buttDamping'].includes(id) ? `${Math.round(value * 100)}%` : `${value.toFixed(1)}×`;
   }
   for (const id of settings) {
     $(`tissue-${id}`).oninput = () => {

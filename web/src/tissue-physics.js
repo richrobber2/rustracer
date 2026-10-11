@@ -1,6 +1,6 @@
 // An illustrative anchored surface spring network, not calibrated biomechanics.
 // Displacements are in meters. A fixed skeleton supports the rest surface.
-const SOFTNESS = [0.12, 0.8, 0.95, 0.9, 0.5, 0.7, 0.4, 0.06, 1];
+const SOFTNESS = [0.12, 0.8, 0.95, 0.9, 0.5, 0.7, 0.4, 0.06, 1, .9];
 const DT = 1 / 120;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -11,6 +11,20 @@ export class TissueSystem {
     this.edges = new Uint32Array(data.edges);
     this.regions = new Uint8Array(data.regions);
     this.count = this.rest.length / 3;
+    // Posterior hip particles retain their original surface mapping, but gain a
+    // separate response region. +Z is the front in these MakeHuman assets.
+    this.regionNames = [...(data.regionNames || [])];
+    this.regionNames[9] = 'Buttocks';
+    this.buttAttachment = new Float32Array(this.count);
+    for (let i = 0; i < this.count; i++) {
+      const j = i * 3;
+      if (this.regions[i] === 3 && this.rest[j + 2] < 0 && this.normals[j + 2] < -.2) {
+        this.regions[i] = 9;
+        const midline = Math.exp(-((this.rest[j] / (data.height * .035)) ** 2));
+        const upper = Math.max(0, Math.min(1, (this.rest[j + 1] / data.height - .49) / .05));
+        this.buttAttachment[i] = Math.max(midline, upper);
+      }
+    }
     this.offset = new Float32Array(this.rest.length);
     this.velocity = new Float32Array(this.rest.length);
     this.force = new Float32Array(this.rest.length);
@@ -24,7 +38,7 @@ export class TissueSystem {
     this.degree = new Uint16Array(this.count);
     for (const id of this.edges) this.degree[id]++;
     for (let e = 0; e < this.edges.length; e += 2) this.edgeFactors[e / 2] = 1 / Math.sqrt(Math.max(1, this.degree[this.edges[e]] * this.degree[this.edges[e + 1]]));
-    this.parameters = { stiffness: 45, damping: 0.5, gravity: 0.3, tension: 0, strength: 1, radius: 0.10, region: -1, genitalCompliance: 1, genitalDamping: .5, genitalScale: 1 };
+    this.parameters = { stiffness: 45, damping: 0.5, gravity: 0.3, tension: 0, strength: 1, radius: 0.10, region: -1, genitalCompliance: 1, genitalDamping: .5, genitalScale: 1, buttCompliance: 1, buttDamping: .5 };
     this.paused = false;
     this._vibration = false;
     this.sleeping = false; this.quietTime = 0;
@@ -42,15 +56,16 @@ export class TissueSystem {
     const p = this.parameters;
     for (let i = 0; i < this.count; i++) {
       const genital = this.regions[i] === 8, soft = this.softness[i];
-      const tension = (p.region < 0 || this.regions[i] === p.region) && this.regions[i] > 0 && this.regions[i] < 7 ? p.tension : 0;
+      const tension = (p.region < 0 || this.regions[i] === p.region) && this.regions[i] > 0 && (this.regions[i] < 7 || this.regions[i] === 9) ? p.tension : 0;
       this.support[i] = (100 + p.stiffness * 8) * (1 + tension * 2) / ((.2 + soft) * (genital ? p.genitalCompliance * p.genitalScale ** 2 : 1));
-      this.bulge[i] = .006 * tension * soft;
-      this.decay[i] = Math.exp(-(2 + (genital ? p.genitalDamping : p.damping) * 36) * DT);
-      this.limits[i] = genital ? Math.min(.06, (this.sex === 'female' ? .010 : .035) * p.genitalScale) : .006 + .055 * soft;
+      if (this.regions[i] === 9) this.support[i] *= (1 + this.buttAttachment[i] * 2.5) / p.buttCompliance;
+      this.bulge[i] = .006 * tension * soft * (this.regions[i] === 9 ? 1 - this.buttAttachment[i] : 1);
+      this.decay[i] = Math.exp(-(2 + (genital ? p.genitalDamping : this.regions[i] === 9 ? p.buttDamping : p.damping) * 36) * DT);
+      this.limits[i] = genital ? Math.min(.06, (this.sex === 'female' ? .010 : .035) * p.genitalScale) : (.006 + .055 * soft) * (this.regions[i] === 9 ? 1 - .65 * this.buttAttachment[i] : 1);
     }
   }
   configure(values) {
-    const ranges = { stiffness: [1, 100], damping: [0, 1], gravity: [0, 2], tension: [0, 1], strength: [0.1, 3], radius: [0.03, 0.25], region: [-1, 8], genitalCompliance: [.5, 2], genitalDamping: [0, 1], genitalScale: [.55, 1.75] };
+    const ranges = { stiffness: [1, 100], damping: [0, 1], gravity: [0, 2], tension: [0, 1], strength: [0.1, 3], radius: [0.03, 0.25], region: [-1, 9], genitalCompliance: [.5, 2], genitalDamping: [0, 1], genitalScale: [.55, 1.75], buttCompliance: [.5, 2], buttDamping: [0, 1] };
     let changed = false;
     for (const [key, value] of Object.entries(values)) {
       if (!ranges[key] || !Number.isFinite(value)) continue;
