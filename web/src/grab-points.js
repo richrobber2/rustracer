@@ -1,9 +1,10 @@
 import { isSideRegion } from './upper-body.js';
+import { regionMatches } from './abdomen.js';
 
 export function eligibleGrabAnchor(system, id) {
   if (!Number.isInteger(id) || id < 0 || id >= system.count) return false;
   const { region, buttSide } = system.parameters, actual = system.regions[id];
-  if (region >= 0 && actual !== region) return false;
+  if (!regionMatches(region, actual)) return false;
   if (isSideRegion(actual)) {
     const side = Math.sign(system.rest[id * 3]);
     if (buttSide !== 2 && (side === 0 || (buttSide !== 0 && side !== buttSide))) return false;

@@ -46,7 +46,7 @@ for(const sex of ['female','male']) {
   const bytes=fs.readFileSync(new URL(`../public/bodies/${sex}.glb`,import.meta.url));const gltf=await loader.parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');let g;gltf.scene.traverse(n=>{if(n.geometry?.attributes._cage_index)g=n.geometry;});
   const s=new TissueSystem(data);assert.ok(isolateButtockWeights(g,s)>0);const base=g.attributes.position.array.slice();
   const deformer=new SurfaceDeformer(g,s.count);
-  for(const region of [4,9,10,11,12,13]){
+  for(const region of [3,4,9,10,11,12,13,14,15]){
    s.offset.fill(0);for(let i=0;i<s.count;i++)if(s.regions[i]===region&&s.rest[i*3]>0)s.offset[i*3+2]=-.02;
    deformer.update(s.offset,{force:true,normals:true});const out=g.attributes.position.array;let active=0;
    for(let i=0;i<g.attributes.position.count;i++){

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { TissueSystem } from './tissue-physics.js';
 import { isolateButtockWeights } from './buttock-sides.js';
-import { ButtockMap, MAP_REGIONS } from './buttock-map.js';
+import { ButtockMap, MAP_REGIONS, mapModeForRegion } from './buttock-map.js';
 import { isSideRegion } from './upper-body.js';
 import { surfaceGrabAnchor } from './grab-points.js';
 import { SurfaceDeformer } from './surface-deformer.js';
@@ -37,6 +37,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   let grabCanvas = canvas, mapDrag = null;
   const buttockMap = new ButtockMap(mapCanvas, $('buttock-map-status'), $('tissue-mapRegion').value);
   const settings = ['stiffness', 'damping', 'gravity', 'tension', 'radius', 'strength', 'genitalCompliance', 'genitalDamping', 'buttCompliance', 'buttDamping', 'lumbarCoupling', 'lumbarSupport', 'lumbarDamping', 'upperCoupling', 'upperSupport', 'shoulderCoupling', 'shoulderSupport', 'handCoupling', 'handSupport'];
+  settings.push('absSupport', 'obliqueSupport', 'absCoupling', 'coreCoupling', 'coreBracing', 'absDamping');
   const parameterValues = () => ({ ...Object.fromEntries(settings.map(id => [id, Number($(`tissue-${id}`).value)])), buttSide: Number($('tissue-buttSide').value) });
   function setButtons() {
     $('tissue-pause').textContent = current?.system.paused ? 'Resume physics' : 'Pause physics';
@@ -180,6 +181,12 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   $('focus-pelvis').onclick = () => focusRegion(8);
   $('focus-buttocks').onclick = () => focusRegion(9, true);
   $('focus-upper').onclick = () => focusRegion(11, true);
+  $('focus-abs').onclick = () => {
+    if (!current) return;
+    endPointer(); focusRegion(14); setMapMode('abs');
+    current.system.configure({ region: 2 }); $('tissue-region').value = '2';
+    buttockMap.next = 0; setPanel('physics');
+  };
   const snapshot = () => ({ version: 1, sex: current.sex, proportions: { ...shape }, tissue: { ...current.system.parameters, ...parameterValues() } });
   const restoreCharacter = value => { const character = readCharacter(value); load(character.sex, character); };
   for (const button of document.querySelectorAll('[data-save-character]')) button.onclick = () => {
@@ -259,8 +266,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
         const option = document.createElement('option'); option.value = String(index - 1); option.textContent = label; return option;
       }));
       $('tissue-region').value = String(system.parameters.region);
-      if (system.parameters.region === 9) setMapMode('pelvis');
-      else if (system.parameters.region === 4 || system.parameters.region >= 11) setMapMode('upper');
+      setMapMode(mapModeForRegion(system.parameters.region, buttockMap.mode));
       for (const button of document.querySelectorAll('[data-body]')) button.setAttribute('aria-pressed', String(button.dataset.body === sex));
       $('body-download').href = modelUrl; $('body-download').download = `${sex}-body.glb`;
       $('body-download').textContent = `Download base ${sex} GLB`;
@@ -281,7 +287,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   for (const button of document.querySelectorAll('[data-body]')) button.onclick = () => load(button.dataset.body);
   for (const button of document.querySelectorAll('[data-tissue-tool]')) button.onclick = () => setTool(button.dataset.tissueTool);
   function formatParameter(id, value) {
-    return id === 'radius' ? `${Math.round(value * 100)} cm` : id === 'stiffness' ? String(value) : ['damping', 'tension', 'genitalDamping', 'buttDamping', 'lumbarCoupling', 'lumbarSupport', 'lumbarDamping', 'upperCoupling', 'upperSupport', 'shoulderCoupling', 'shoulderSupport', 'handCoupling', 'handSupport'].includes(id) ? `${Math.round(value * 100)}%` : `${value.toFixed(1)}×`;
+    return id === 'radius' ? `${Math.round(value * 100)} cm` : id === 'stiffness' ? String(value) : ['damping', 'tension', 'genitalDamping', 'buttDamping', 'lumbarCoupling', 'lumbarSupport', 'lumbarDamping', 'upperCoupling', 'upperSupport', 'shoulderCoupling', 'shoulderSupport', 'handCoupling', 'handSupport', 'absSupport', 'obliqueSupport', 'absCoupling', 'coreCoupling', 'coreBracing', 'absDamping'].includes(id) ? `${Math.round(value * 100)}%` : `${value.toFixed(1)}×`;
   }
   for (const id of settings) {
     $(`tissue-${id}`).oninput = () => {
@@ -299,8 +305,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   function setMapMode(mode) { $('tissue-mapRegion').value = mode; buttockMap.setMode(mode); }
   function showAnchor(id) {
     const region = current.system.regions[id];
-    if (region === 9) setMapMode('pelvis');
-    else if (region === 4 || region >= 11) setMapMode('upper');
+    setMapMode(mapModeForRegion(region, buttockMap.mode));
     buttockMap.select(id);
   }
   $('tissue-mapRegion').onchange = () => {
@@ -313,7 +318,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   $('tissue-buttSide').onchange = () => { endPointer(); current?.system.configure({ buttSide: Number($('tissue-buttSide').value) }); buttockMap.next = 0; resume(); };
   $('tissue-region').onchange = () => {
     endPointer(); const region = Number($('tissue-region').value); current?.system.configure({ region });
-    if (region === 9) setMapMode('pelvis'); else if (region === 4 || region >= 11) setMapMode('upper');
+    setMapMode(mapModeForRegion(region, buttockMap.mode));
     buttockMap.next = 0; resume();
   };
   $('tissue-pause').onclick = () => current?.system.paused ? resume() : pause();

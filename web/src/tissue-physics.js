@@ -2,7 +2,8 @@
 // Displacements are in meters. A fixed skeleton supports the rest surface.
 import { upperRegion, isSideRegion, upperBoundary, buildUpperLinks } from './upper-body.js';
 import { eligibleGrabAnchor } from './grab-points.js';
-const SOFTNESS = [0.12, 0.8, 0.95, 0.9, 0.5, 0.7, 0.4, 0.06, 1, .9, .45, .5, .55, .16];
+import { abdominalRegion, abdominalBoundary, buildAbdominalLinks, regionMatches } from './abdomen.js';
+const SOFTNESS = [0.12, 0.8, 0.95, 0.9, 0.5, 0.7, 0.4, 0.06, 1, .9, .45, .5, .55, .16, .65, .55];
 const DT = 1 / 120;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -22,6 +23,9 @@ export class TissueSystem {
     this.regionNames[11] = 'Upper back';
     this.regionNames[12] = 'Shoulders';
     this.regionNames[13] = 'Hands / wrists';
+    this.regionNames[2] = 'Abdomen · abs & obliques';
+    this.regionNames[14] = 'Abs / rectus';
+    this.regionNames[15] = 'Obliques / lateral abdomen';
     this.lastButtSide = 0;
     this.buttAttachment = new Float32Array(this.count);
     for (let i = 0; i < this.count; i++) {
@@ -34,6 +38,7 @@ export class TissueSystem {
       }
       if (this.regions[i] === 2 && this.rest[j + 2] < 0 && this.normals[j + 2] < -.2) this.regions[i] = 10;
       this.regions[i] = upperRegion(this.regions[i], this.rest[j], this.rest[j + 1], this.rest[j + 2], this.normals[j + 2], data.height);
+      this.regions[i] = abdominalRegion(this.regions[i], this.rest[j], this.rest[j + 1], this.rest[j + 2], this.normals[j + 2], data.height);
     }
     this.offset = new Float32Array(this.rest.length);
     this.velocity = new Float32Array(this.rest.length);
@@ -52,12 +57,15 @@ export class TissueSystem {
       const crossesPosterior = (data.regions[a] === 3 || data.regions[b] === 3 || isSideRegion(this.regions[a]) || isSideRegion(this.regions[b])) && this.rest[a * 3] * this.rest[b * 3] <= 0;
       const lumbarBoundary = (this.regions[a] === 9 && this.regions[b] === 10) || (this.regions[b] === 9 && this.regions[a] === 10);
       // Regional bridges below own the pelvis-to-back connection, including its off switch.
-      this.edgeFactors[e / 2] = crossesPosterior || lumbarBoundary || upperBoundary(this.regions[a], this.regions[b]) ? 0 : 1 / Math.sqrt(Math.max(1, this.degree[a] * this.degree[b]));
+      this.edgeFactors[e / 2] = crossesPosterior || lumbarBoundary || upperBoundary(this.regions[a], this.regions[b]) || abdominalBoundary(this.regions[a], this.regions[b]) ? 0 : 1 / Math.sqrt(Math.max(1, this.degree[a] * this.degree[b]));
     }
     this.buildLumbarLinks(data.height);
     this.upperLinks = buildUpperLinks(this, data.height);
+    this.abdominalLinks = buildAbdominalLinks(this, data.height);
+    this.regionalLinks = [...this.upperLinks, ...this.abdominalLinks];
     this.parameters = { stiffness: 45, damping: 0.5, gravity: 0.3, tension: 0, strength: 1, radius: 0.10, region: -1, genitalCompliance: 1, genitalDamping: .5, genitalScale: 1, buttCompliance: 1, buttDamping: .5, buttMuscle: 1, buttFat: 1, buttSide: 0, buttMuscleLeft: 1, buttMuscleRight: 1, buttFatLeft: 1, buttFatRight: 1, lumbarCoupling: .65, lumbarSupport: .35, lumbarDamping: .65, upperCoupling: .65, upperSupport: .25, shoulderCoupling: .65, shoulderSupport: .35, handCoupling: .65, handSupport: .4 };
     this.paused = false;
+    Object.assign(this.parameters, { absSupport: .35, obliqueSupport: .45, absCoupling: .65, coreCoupling: .65, coreBracing: 0, absDamping: .6 });
     this._vibration = false;
     this.sleeping = false; this.quietTime = 0;
     this.grab = null;
@@ -98,7 +106,7 @@ export class TissueSystem {
   wake() { this.sleeping = false; this.quietTime = 0; }
   selected(i) {
     const { region, buttSide } = this.parameters;
-    if (region >= 0 && this.regions[i] !== region) return false;
+    if (!regionMatches(region, this.regions[i])) return false;
     if (!isSideRegion(this.regions[i]) || buttSide === 2) return true;
     const side = buttSide || this.lastButtSide;
     return side !== 0 && Math.sign(this.rest[i * 3]) === side;
@@ -116,14 +124,20 @@ export class TissueSystem {
       if (this.regions[i] === 11) this.support[i] *= 1 + p.upperSupport * 3;
       if (this.regions[i] === 12) this.support[i] *= 1 + p.shoulderSupport * 3;
       if (this.regions[i] === 13) this.support[i] *= 1 + p.handSupport * 3;
+      if (this.regions[i] === 14) this.support[i] *= 1 + p.absSupport * 3;
+      if (this.regions[i] === 15) this.support[i] *= 1 + p.obliqueSupport * 3;
+      if (this.regions[i] === 10 || this.regions[i] === 14 || this.regions[i] === 15) this.support[i] *= 1 + p.coreBracing * 2.5;
       this.bulge[i] = .006 * tension * soft * (this.regions[i] === 9 ? 1 - this.buttAttachment[i] : 1);
       this.decay[i] = Math.exp(-(2 + (genital ? p.genitalDamping : this.regions[i] === 9 ? p.buttDamping : this.regions[i] === 10 ? p.lumbarDamping : p.damping) * 36) * DT);
+      if (this.regions[i] === 14 || this.regions[i] === 15) this.decay[i] = Math.exp(-(2 + p.absDamping * 36) * DT);
       this.limits[i] = genital ? Math.min(.06, (this.sex === 'female' ? .010 : .035) * p.genitalScale) : (.006 + .055 * soft) * (this.regions[i] === 9 ? (1 - .65 * this.buttAttachment[i]) * Math.sqrt(fat) : 1);
       if (this.regions[i] === 13) this.limits[i] = Math.min(.012, this.limits[i]);
     }
   }
   configure(values) {
     const ranges = { stiffness: [1, 100], damping: [0, 1], gravity: [0, 2], tension: [0, 1], strength: [0.1, 3], radius: [0.03, 0.25], region: [-1, 13], genitalCompliance: [.5, 2], genitalDamping: [0, 1], genitalScale: [.55, 1.75], buttCompliance: [.5, 2], buttDamping: [0, 1], buttMuscle: [.75, 1.4], buttFat: [.5, 1.75], buttSide: [-1, 2], buttMuscleLeft: [.75, 1.4], buttMuscleRight: [.75, 1.4], buttFatLeft: [.5, 1.75], buttFatRight: [.5, 1.75], lumbarCoupling: [0, 1], lumbarSupport: [0, 1], lumbarDamping: [0, 1], upperCoupling: [0, 1], upperSupport: [0, 1], shoulderCoupling: [0, 1], shoulderSupport: [0, 1], handCoupling: [0, 1], handSupport: [0, 1] };
+    ranges.region[1] = 15;
+    for (const key of ['absSupport', 'obliqueSupport', 'absCoupling', 'coreCoupling', 'coreBracing', 'absDamping']) ranges[key] = [0, 1];
     let changed = false;
     for (const [key, value] of Object.entries(values)) {
       if (!ranges[key] || !Number.isFinite(value)) continue;
@@ -246,7 +260,7 @@ export class TissueSystem {
         f[ia] += force; f[ib] -= force;
       }
     }
-    for (const group of this.upperLinks) {
+    for (const group of this.regionalLinks) {
       const baseK = (400 + stiffness * 20) * this.parameters[group.parameter];
       for (let e = 0; e < group.ids.length; e += 2) {
         const a = group.ids[e], b = group.ids[e + 1], k = baseK * group.factors[e / 2];

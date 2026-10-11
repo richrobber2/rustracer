@@ -45,7 +45,7 @@ test('actual map controls capture a displaced sample, cancel, and release on pan
     if (value.includes('female.glb')) return new Response(fs.readFileSync(new URL('../public/bodies/female.glb', import.meta.url)));
     return original.fetch(url, options); // Embedded texture blob URL only.
   };
-  const controls = { enabled: true }, renderer = { domElement: new Element() }, notifications = [];
+  const controls = { enabled: true, target: new THREE.Vector3(), update() {} }, renderer = { domElement: new Element() }, notifications = [];
   const lab = createBodyLab({ renderer, camera: new THREE.PerspectiveCamera(), controls, onReady() {}, requestRealtime() {}, notify(message) { notifications.push(message); } });
   await lab.load('female'); assert.ok(lab.active, notifications.join('; '));
   const data = JSON.parse(fs.readFileSync(new URL('../public/bodies/female-cage.json', import.meta.url))), system = new TissueSystem(data);
@@ -63,4 +63,18 @@ test('actual map controls capture a displaced sample, cancel, and release on pan
   projection.setMode('pelvis'); const glute = mapSamples(system, MAP_REGIONS.pelvis).find(p => p.region === 9 && p.x > .03), at = projection.project(glute);
   mapCanvas.emit('pointerdown', { ...event, pointerId: 8, clientX: at.x, clientY: at.y }); assert.equal(controls.enabled, false);
   lab.setPanel('studio'); assert.equal(controls.enabled, true); assert.equal(mapCanvas.hasPointerCapture(8), false);
+  // The front abdominal view must use its own projection, including selection
+  // by the new region IDs and the legacy combined abdomen selector.
+  elements.get('focus-abs').onclick(); assert.equal(elements.get('tissue-mapRegion').value, 'abs'); assert.equal(elements.get('tissue-region').value, '2');
+  elements.get('tissue-region').value = '14'; elements.get('tissue-region').onchange(); assert.equal(elements.get('tissue-mapRegion').value, 'abs');
+  projection.setMode('abs'); const abs = mapSamples(system, MAP_REGIONS.abs).find(p => p.region === 14 && p.x > .03), front = projection.project(abs);
+  mapCanvas.emit('pointerdown', { ...event, pointerId: 9, clientX: front.x, clientY: front.y }); assert.equal(controls.enabled, false); assert.ok(mapCanvas.hasPointerCapture(9));
+  assert.match(elements.get('buttock-map-status').textContent, /grab anchor: Abs/);
+  mapCanvas.emit('pointermove', { ...event, pointerId: 9, clientX: front.x + 10 });
+  // A map-mode change cancels the grab and removes the incompatible abs filter.
+  elements.get('tissue-mapRegion').value = 'upper'; elements.get('tissue-mapRegion').onchange();
+  assert.equal(controls.enabled, true); assert.equal(mapCanvas.hasPointerCapture(9), false); assert.equal(elements.get('tissue-region').value, '-1');
+  for (const key of ['absSupport', 'obliqueSupport', 'absCoupling', 'coreCoupling', 'coreBracing', 'absDamping']) {
+    elements.get(`tissue-${key}`).value = '.8'; elements.get(`tissue-${key}`).oninput(); assert.equal(elements.get(`tissue-${key}-value`).value, '80%');
+  }
 });

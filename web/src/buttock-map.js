@@ -1,6 +1,13 @@
 import { eligibleGrabAnchor } from './grab-points.js';
-// Current cage samples in a rear projection, shared by drawing and picking.
-export const MAP_REGIONS = { pelvis: [9, 10], upper: [4, 10, 11, 12, 13] };
+// Current cage samples, shared by projection, drawing and picking.
+export const MAP_REGIONS = { pelvis: [9, 10], upper: [4, 10, 11, 12, 13], abs: [2, 14, 15] };
+export function mapModeForRegion(region, current = 'upper') {
+  if (MAP_REGIONS.abs.includes(region)) return 'abs';
+  if (region === 9) return 'pelvis';
+  if (region === 10) return current === 'upper' ? 'upper' : 'pelvis';
+  if ([4, 11, 12, 13].includes(region)) return 'upper';
+  return current;
+}
 export function buttockSamples(system) {
   return posteriorSamples(system).filter(p => p.region === 9);
 }
@@ -46,15 +53,15 @@ export class ButtockMap {
     this.mode = mode;
     if (this.system) this.setSystem(this.system);
   }
-  project(point) { return { x: this.canvas.width / 2 - (point.x - this.centerX) * this.scale, y: (this.canvas.height - 30) / 2 - (point.y - this.centerY) * this.scale }; }
-  worldDelta(dx, dy) { return [-dx / this.scale, -dy / this.scale, 0]; }
+  project(point) { return { x: this.canvas.width / 2 + (this.mode === 'abs' ? 1 : -1) * (point.x - this.centerX) * this.scale, y: (this.canvas.height - 30) / 2 - (point.y - this.centerY) * this.scale }; }
+  worldDelta(dx, dy) { return [(this.mode === 'abs' ? 1 : -1) * dx / this.scale, -dy / this.scale, 0]; }
   pick(x, y, radius = 11) {
     if (!this.system || !Number.isFinite(x) || !Number.isFinite(y)) return null;
     let nearest = null, best = radius * radius;
     for (const point of mapSamples(this.system, MAP_REGIONS[this.mode])) {
       if (!eligibleGrabAnchor(this.system, point.id)) continue;
       const pixel = this.project(point), distance = (pixel.x - x) ** 2 + (pixel.y - y) ** 2;
-      if (distance < best || (nearest && Math.abs(distance - best) < 1e-8 && point.z < nearest.z)) { nearest = point; best = distance; }
+      if (distance < best || (nearest && Math.abs(distance - best) < 1e-8 && (this.mode === 'abs' ? point.z > nearest.z : point.z < nearest.z))) { nearest = point; best = distance; }
     }
     return nearest;
   }
@@ -62,13 +69,13 @@ export class ButtockMap {
   update(now) {
     if (!this.system || !this.context || now < this.next) return;
     this.next = now + 100;
-    const c = this.context, w = this.canvas.width, h = this.canvas.height, points = mapSamples(this.system, MAP_REGIONS[this.mode]).sort((a, b) => b.z - a.z);
+    const c = this.context, w = this.canvas.width, h = this.canvas.height, points = mapSamples(this.system, MAP_REGIONS[this.mode]).sort((a, b) => this.mode === 'abs' ? a.z - b.z : b.z - a.z);
     c.fillStyle = '#101820'; c.fillRect(0, 0, w, h);
     c.strokeStyle = '#2b3c48'; c.lineWidth = 1;
     c.beginPath(); c.moveTo(w / 2, 16); c.lineTo(w / 2, h - 24); c.stroke();
     c.fillStyle = '#a7b7c3'; c.font = '11px system-ui'; c.textAlign = 'center';
     c.fillText('Screen left', w * .25, h - 7); c.fillText('Screen right', w * .75, h - 7);
-    // Flip X to match the rear camera: +X appears on screen left.
+    // Rear maps flip X; the front abs map follows the front camera.
     let maximum = 0, sum = 0, glutePeak = 0, backPeak = 0;
     const peaks = {};
     for (const p of points) {
@@ -83,7 +90,7 @@ export class ButtockMap {
       peaks[p.region] = Math.max(peaks[p.region] || 0, p.mm);
     }
     c.textAlign = 'left'; c.fillStyle = '#a7b7c3';
-    c.fillText(this.mode === 'pelvis' ? 'Lower back' : 'Upper back / shoulders', 6, 11);
+    c.fillText(this.mode === 'abs' ? 'Front · abs / obliques' : this.mode === 'pelvis' ? 'Lower back' : 'Upper back / shoulders', 6, 11);
     const back = points.filter(p => p.region === 10), glutes = points.filter(p => p.region === 9);
     if (this.mode === 'pelvis' && back.length && glutes.length) {
       const boundary = (Math.min(...back.map(p => p.y)) + Math.max(...glutes.map(p => p.y))) / 2;
@@ -96,9 +103,10 @@ export class ButtockMap {
       const { x, y } = this.project(selected);
       c.strokeStyle = '#ffffff'; c.lineWidth = 2; c.beginPath(); c.arc(x, y, 8, 0, Math.PI * 2); c.stroke(); c.lineWidth = 1;
     }
-    const readings = this.mode === 'pelvis' ? `buttocks ${glutePeak.toFixed(2)} mm · back ${backPeak.toFixed(2)} mm` : `upper back ${(peaks[11] || 0).toFixed(2)} mm · shoulders ${(peaks[12] || 0).toFixed(2)} mm · hands ${(peaks[13] || 0).toFixed(2)} mm`;
+    if (this.mode === 'abs') for (const p of mapSamples(this.system, [3, 10])) peaks[p.region] = Math.max(peaks[p.region] || 0, p.mm);
+    const readings = this.mode === 'abs' ? `abs ${(peaks[14] || 0).toFixed(2)} mm · obliques ${(peaks[15] || 0).toFixed(2)} mm · linked back ${(peaks[10] || 0).toFixed(2)} mm · pelvis ${(peaks[3] || 0).toFixed(2)} mm` : this.mode === 'pelvis' ? `buttocks ${glutePeak.toFixed(2)} mm · back ${backPeak.toFixed(2)} mm` : `upper back ${(peaks[11] || 0).toFixed(2)} mm · shoulders ${(peaks[12] || 0).toFixed(2)} mm · hands ${(peaks[13] || 0).toFixed(2)} mm`;
     const anchor = selected ? ` · grab anchor: ${this.system.regionNames[selected.region]}` : '';
-    this.canvas.setAttribute('aria-label', `Rear tissue displacement: peak ${maximum.toFixed(1)} millimeters, mean ${(sum / points.length).toFixed(1)} millimeters across ${points.length} samples; lower back ${backPeak.toFixed(2)} millimeters; ${readings}${anchor}`);
+    this.canvas.setAttribute('aria-label', `${this.mode === 'abs' ? 'Front' : 'Rear'} tissue displacement: peak ${maximum.toFixed(1)} millimeters, mean ${(sum / points.length).toFixed(1)} millimeters across ${points.length} samples; ${this.mode === 'abs' ? '' : `lower back ${backPeak.toFixed(2)} millimeters; `}${readings}${anchor}`);
     this.status.textContent = `${this.system.paused ? 'Paused · ' : this.system.sleeping ? 'Settled · ' : ''}${points.length} samples · peak ${maximum.toFixed(1)} mm · mean ${(sum / points.length).toFixed(1)} mm · ${readings}${anchor}`;
   }
 }

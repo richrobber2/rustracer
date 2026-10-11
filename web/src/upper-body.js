@@ -1,6 +1,6 @@
 // Region and bridge approximations for the supplied, fixed-pose adult cages.
 // +Z faces forward; +X appears on the left when viewed from behind.
-export function isSideRegion(region) { return region === 4 || region >= 9; }
+export function isSideRegion(region) { return region === 2 || region === 3 || region === 4 || region >= 9; }
 
 export function upperRegion(original, x, y, z, normalZ, height) {
   const lateral = Math.abs(x) / height, level = y / height;
@@ -21,8 +21,12 @@ export function upperBoundary(a, b) {
 }
 
 export function buildUpperLinks(system, height) {
+  return buildRegionalLinks(system, height, GROUPS);
+}
+
+export function buildRegionalLinks(system, height, groups) {
   const { regions, rest, edges, count } = system;
-  return GROUPS.map(group => {
+  return groups.map(group => {
     const pairs = new Map(), degree = new Uint16Array(count);
     const add = (a, b) => {
       if (rest[a * 3] * rest[b * 3] <= 0) return;
@@ -35,7 +39,7 @@ export function buildUpperLinks(system, height) {
       const bIds = Array.from(regions.keys()).filter(i => regions[i] === rb);
       // Retain real boundary edges, then add sparse bridges in both directions
       // so isolated patches can take part. This is a lumped surface load path,
-      // not a reconstruction of scapular mechanics or muscle/tendon fibers.
+      // not a reconstruction of articulated joints or muscle/tendon fibers.
       for (let e = 0; e < edges.length; e += 2) {
         const a = edges[e], b = edges[e + 1];
         if ((regions[a] === ra && regions[b] === rb) || (regions[a] === rb && regions[b] === ra)) add(a, b);

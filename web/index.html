@@ -28,6 +28,7 @@
         <p class="hint">Values are relative to the base body. Editing proportions resets tissue to its new resting shape.</p>
         <div class="preset-row"><button id="proportions-reset">Reset shape</button><button id="proportions-random">Randomize</button><button id="focus-pelvis">Focus pelvis</button><button id="focus-buttocks">Rear view</button></div>
         <button id="focus-upper" class="wide quiet">Upper-back view</button>
+        <button id="focus-abs" class="wide quiet">Abs view & physics</button>
         <p class="hint">Muscle bulk and fat padding edit the selected side independently. Both sides overwrites both values. They are separate shape and support approximations, relative to this base. Internal tissue layers and mass are not measured.</p>
         <h3 class="saved-title">Character presets</h3>
         <div class="save-slots"><div><span>A</span><button data-save-character="a">Save A</button><button data-load-character="a">Load A</button></div><div><span>B</span><button data-save-character="b">Save B</button><button data-load-character="b">Load B</button></div></div>
@@ -48,8 +49,16 @@
           <label class="slider-label" for="tissue-gravity">Gravity <output id="tissue-gravity-value">0.3×</output></label><input id="tissue-gravity" type="range" min="0" max="2" step="0.1" value="0.3">
           <label class="slider-label" for="tissue-radius">Touch radius <output id="tissue-radius-value">10 cm</output></label><input id="tissue-radius" type="range" min="0.03" max="0.25" step="0.01" value="0.1">
           <label class="slider-label" for="tissue-strength">Touch strength <output id="tissue-strength-value">1.0×</output></label><input id="tissue-strength" type="range" min="0.1" max="3" step="0.1" value="1">
-          <label class="select-label" for="tissue-buttSide">Interaction side · as seen from the rear<select id="tissue-buttSide"><option value="0" selected>Auto · last touched side</option><option value="1">Rear-view left</option><option value="-1">Rear-view right</option><option value="2">Both sides</option></select></label>
-          <details class="genital-controls" open><summary>Upper back, shoulders & hands</summary>
+          <label class="select-label" for="tissue-buttSide">Interaction side<select id="tissue-buttSide"><option value="0" selected>Auto · last touched side</option><option value="1">Front right / rear left</option><option value="-1">Front left / rear right</option><option value="2">Both sides</option></select></label>
+          <details class="genital-controls" open><summary>Abs, obliques & core</summary>
+          <label class="slider-label" for="tissue-absSupport">Rectus support <output id="tissue-absSupport-value">35%</output></label><input id="tissue-absSupport" type="range" min="0" max="1" step="0.05" value="0.35">
+          <label class="slider-label" for="tissue-obliqueSupport">Oblique support <output id="tissue-obliqueSupport-value">45%</output></label><input id="tissue-obliqueSupport" type="range" min="0" max="1" step="0.05" value="0.45">
+          <label class="slider-label" for="tissue-absCoupling">Abs-to-oblique coupling <output id="tissue-absCoupling-value">65%</output></label><input id="tissue-absCoupling" type="range" min="0" max="1" step="0.05" value="0.65">
+          <label class="slider-label" for="tissue-coreCoupling">Abdomen / back / pelvis coupling <output id="tissue-coreCoupling-value">65%</output></label><input id="tissue-coreCoupling" type="range" min="0" max="1" step="0.05" value="0.65">
+          <label class="slider-label" for="tissue-coreBracing">Core bracing <output id="tissue-coreBracing-value">0%</output></label><input id="tissue-coreBracing" type="range" min="0" max="1" step="0.05" value="0">
+          <label class="slider-label" for="tissue-absDamping">Abdominal damping <output id="tissue-absDamping-value">60%</output></label><input id="tissue-absDamping" type="range" min="0" max="1" step="0.05" value="0.6">
+          <p class="hint">Central abs ↔ obliques ↔ lower back, with abdominal links to the pelvis. Choose a region and side, then pulse or grab a front-map dot. Higher support and bracing resist deformation; bracing stiffens the abdomen and lower back together. Obliques combine the lateral muscle layers; deep transversus activity is approximated by bracing. The skeleton holds its pose.</p></details>
+          <details class="genital-controls"><summary>Upper back, shoulders & hands</summary>
           <label class="slider-label" for="tissue-upperCoupling">Lower-to-upper back coupling <output id="tissue-upperCoupling-value">65%</output></label><input id="tissue-upperCoupling" type="range" min="0" max="1" step="0.05" value="0.65">
           <label class="slider-label" for="tissue-upperSupport">Upper-back support <output id="tissue-upperSupport-value">25%</output></label><input id="tissue-upperSupport" type="range" min="0" max="1" step="0.05" value="0.25">
           <label class="slider-label" for="tissue-shoulderCoupling">Back / shoulder / arm coupling <output id="tissue-shoulderCoupling-value">65%</output></label><input id="tissue-shoulderCoupling" type="range" min="0" max="1" step="0.05" value="0.65">
@@ -70,11 +79,11 @@
           <p class="hint">External tissue with a supported attachment. Proportions also change its response and movement limit.</p></details>
           <section class="buttock-map-panel" aria-labelledby="buttock-map-title">
           <h3 id="buttock-map-title">2D displacement & grab points</h3>
-          <label class="select-label" for="tissue-mapRegion">Map region<select id="tissue-mapRegion"><option value="upper" selected>Upper back → shoulders → hands</option><option value="pelvis">Buttocks & lower back</option></select></label>
+          <label class="select-label" for="tissue-mapRegion">Map region<select id="tissue-mapRegion"><option value="abs">Abs & obliques · front</option><option value="upper" selected>Upper back → shoulders → hands</option><option value="pelvis">Buttocks & lower back</option></select></label>
           <canvas id="buttock-map" width="320" height="240" role="img" aria-label="Interactive rear projection of tissue samples; press or pull a dot to grab its current position"></canvas>
           <div class="map-legend"><span>0 mm</span><span>25 mm</span><span>50+ mm</span></div>
           <p id="buttock-map-status" class="hint" role="status">Choose a body to see tissue samples.</p>
-          <p class="hint">Press or pull a dot to grab that exact sample; drag it sideways or vertically. Orbit switches to Press when you grab the map. The white ring follows your grab anchor, and dim dots are outside the chosen region or side. Dots follow current displacement; color measures distance from rest. Rear projection at 10 Hz.</p>
+          <p class="hint">Press or pull a dot to grab that exact sample; drag it sideways or vertically. Orbit switches to Press when you grab the map. The white ring follows your grab anchor, and dim dots are outside the chosen region or side. Abs uses a front projection; back maps use a rear projection. Abs readings also report linked lower-back and pelvis movement. Dots follow current displacement at 10 Hz; color measures distance from rest.</p>
           </section>
           <label class="select-label" for="tissue-region">Region for touch, pulse & support<select id="tissue-region"><option value="-1">Whole body</option></select></label>
           <label class="select-label" for="tissue-rate">Surface lighting updates<select id="tissue-rate"><option value="15">Responsive · 15 Hz</option><option value="30" selected>Balanced · 30 Hz</option><option value="60">Detailed · 60 Hz</option></select></label><label class="select-label" for="tissue-view">Surface view<select id="tissue-view"><option value="skin">Skin</option><option value="clay">Clay</option><option value="heat">Displacement · blue 0 to red 50 mm</option><option value="wire">Wireframe</option></select></label>
