@@ -1,4 +1,4 @@
-// Keep rear hip skin from blending displacement from the opposite lobe.
+// Keep posterior hip and lumbar skin from blending opposite-side displacement.
 // The fixed skeleton remains shared. UV duplicates receive identical weights.
 export function isolateButtockWeights(geometry, system) {
   const { position, _cage_index: ids, _cage_weight: weights } = geometry.attributes;
@@ -6,14 +6,17 @@ export function isolateButtockWeights(geometry, system) {
   for (let v = 0; v < position.count; v++) {
     const j = v * 3, at = v * 4, x = position.array[j];
     if (Math.abs(x) < 1e-6) continue;
-    let butt = false;
-    for (let k = 0; k < 4; k++) if (system.regions[ids.array[at + k]] === 9) butt = true;
-    if (!butt) continue;
+    let posteriorRegion = -1;
+    for (let k = 0; k < 4; k++) {
+      const region = system.regions[ids.array[at + k]];
+      if (region === 9 || region === 10) posteriorRegion = region;
+    }
+    if (posteriorRegion < 0) continue;
     let sum = 0;
     for (let k = 0; k < 4; k++) if (system.rest[ids.array[at + k] * 3] * x > 0) sum += weights.array[at + k];
     if (sum <= 1e-8) {
       let nearest = -1, distance = Infinity;
-      for (let i = 0; i < system.count; i++) if (system.regions[i] === 9 && system.rest[i * 3] * x > 0) {
+      for (let i = 0; i < system.count; i++) if (system.regions[i] === posteriorRegion && system.rest[i * 3] * x > 0) {
         const d = (system.rest[i * 3] - x) ** 2 + (system.rest[i * 3 + 1] - position.array[j + 1]) ** 2 + (system.rest[i * 3 + 2] - position.array[j + 2]) ** 2;
         if (d < distance) { nearest = i; distance = d; }
       }

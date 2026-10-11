@@ -1,6 +1,6 @@
 // An illustrative anchored surface spring network, not calibrated biomechanics.
 // Displacements are in meters. A fixed skeleton supports the rest surface.
-const SOFTNESS = [0.12, 0.8, 0.95, 0.9, 0.5, 0.7, 0.4, 0.06, 1, .9];
+const SOFTNESS = [0.12, 0.8, 0.95, 0.9, 0.5, 0.7, 0.4, 0.06, 1, .9, .45];
 const DT = 1 / 120;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -15,6 +15,7 @@ export class TissueSystem {
     // separate response region. +Z is the front in these MakeHuman assets.
     this.regionNames = [...(data.regionNames || [])];
     this.regionNames[9] = 'Buttocks';
+    this.regionNames[10] = 'Lower back';
     this.lastButtSide = 0;
     this.buttAttachment = new Float32Array(this.count);
     for (let i = 0; i < this.count; i++) {
@@ -25,6 +26,7 @@ export class TissueSystem {
         const upper = Math.max(0, Math.min(1, (this.rest[j + 1] / data.height - .49) / .05));
         this.buttAttachment[i] = Math.max(midline, upper);
       }
+      if (this.regions[i] === 2 && this.rest[j + 2] < 0 && this.normals[j + 2] < -.2) this.regions[i] = 10;
     }
     this.offset = new Float32Array(this.rest.length);
     this.velocity = new Float32Array(this.rest.length);
@@ -40,10 +42,13 @@ export class TissueSystem {
     for (const id of this.edges) this.degree[id]++;
     for (let e = 0; e < this.edges.length; e += 2) {
       const a = this.edges[e], b = this.edges[e + 1];
-      const crossesPelvis = (data.regions[a] === 3 || data.regions[b] === 3) && this.rest[a * 3] * this.rest[b * 3] <= 0;
-      this.edgeFactors[e / 2] = crossesPelvis ? 0 : 1 / Math.sqrt(Math.max(1, this.degree[a] * this.degree[b]));
+      const crossesPosterior = (data.regions[a] === 3 || data.regions[b] === 3 || this.regions[a] === 10 || this.regions[b] === 10) && this.rest[a * 3] * this.rest[b * 3] <= 0;
+      const lumbarBoundary = (this.regions[a] === 9 && this.regions[b] === 10) || (this.regions[b] === 9 && this.regions[a] === 10);
+      // Regional bridges below own the pelvis-to-back connection, including its off switch.
+      this.edgeFactors[e / 2] = crossesPosterior || lumbarBoundary ? 0 : 1 / Math.sqrt(Math.max(1, this.degree[a] * this.degree[b]));
     }
-    this.parameters = { stiffness: 45, damping: 0.5, gravity: 0.3, tension: 0, strength: 1, radius: 0.10, region: -1, genitalCompliance: 1, genitalDamping: .5, genitalScale: 1, buttCompliance: 1, buttDamping: .5, buttMuscle: 1, buttFat: 1, buttSide: 0, buttMuscleLeft: 1, buttMuscleRight: 1, buttFatLeft: 1, buttFatRight: 1 };
+    this.buildLumbarLinks(data.height);
+    this.parameters = { stiffness: 45, damping: 0.5, gravity: 0.3, tension: 0, strength: 1, radius: 0.10, region: -1, genitalCompliance: 1, genitalDamping: .5, genitalScale: 1, buttCompliance: 1, buttDamping: .5, buttMuscle: 1, buttFat: 1, buttSide: 0, buttMuscleLeft: 1, buttMuscleRight: 1, buttFatLeft: 1, buttFatRight: 1, lumbarCoupling: .65, lumbarSupport: .35, lumbarDamping: .65 };
     this.paused = false;
     this._vibration = false;
     this.sleeping = false; this.quietTime = 0;
@@ -54,13 +59,39 @@ export class TissueSystem {
     this.refreshCoefficients();
   }
 
+  buildLumbarLinks(height) {
+    // Sparse, same-side displacement bridges approximate posterior fascial load
+    // transfer. They are passive surface links, not anatomical muscle fibers.
+    const pairs = new Map(), degree = new Uint16Array(this.count);
+    const add = (a, b) => {
+      if (this.rest[a * 3] * this.rest[b * 3] <= 0) return;
+      const key = `${a}:${b}`;
+      if (pairs.has(key)) return;
+      pairs.set(key, [a, b]); degree[a]++; degree[b]++;
+    };
+    for (let e = 0; e < this.edges.length; e += 2) {
+      let a = this.edges[e], b = this.edges[e + 1];
+      if (this.regions[b] === 9) [a, b] = [b, a];
+      if (this.regions[a] === 9 && this.regions[b] === 10) add(a, b);
+    }
+    const glutes = Array.from(this.regions.keys()).filter(i => this.regions[i] === 9 && this.rest[i * 3 + 1] >= height * .49);
+    for (let b = 0; b < this.count; b++) if (this.regions[b] === 10) {
+      const nearby = glutes.filter(a => this.rest[a * 3] * this.rest[b * 3] > 0).map(a => ({ a,
+        distance: Math.hypot(this.rest[a * 3] - this.rest[b * 3], this.rest[a * 3 + 1] - this.rest[b * 3 + 1], this.rest[a * 3 + 2] - this.rest[b * 3 + 2])
+      })).filter(p => p.distance <= height * .16).sort((a, b) => a.distance - b.distance);
+      for (const { a } of nearby.slice(0, 2)) add(a, b);
+    }
+    this.lumbarLinks = Uint32Array.from([...pairs.values()].flat());
+    this.lumbarFactors = Float32Array.from(pairs.values(), ([a, b]) => 1 / Math.sqrt(degree[a] * degree[b]));
+  }
+
   get vibration() { return this._vibration; }
   set vibration(value) { this._vibration = Boolean(value); this.wake(); }
   wake() { this.sleeping = false; this.quietTime = 0; }
   selected(i) {
     const { region, buttSide } = this.parameters;
     if (region >= 0 && this.regions[i] !== region) return false;
-    if (this.regions[i] !== 9 || buttSide === 2) return true;
+    if ((this.regions[i] !== 9 && this.regions[i] !== 10) || buttSide === 2) return true;
     const side = buttSide || this.lastButtSide;
     return side !== 0 && Math.sign(this.rest[i * 3]) === side;
   }
@@ -68,18 +99,19 @@ export class TissueSystem {
     const p = this.parameters;
     for (let i = 0; i < this.count; i++) {
       const genital = this.regions[i] === 8, soft = this.softness[i];
-      const tension = this.selected(i) && this.regions[i] > 0 && (this.regions[i] < 7 || this.regions[i] === 9) ? p.tension : 0;
+      const tension = this.selected(i) && this.regions[i] > 0 && (this.regions[i] < 7 || this.regions[i] >= 9) ? p.tension : 0;
       this.support[i] = (100 + p.stiffness * 8) * (1 + tension * 2) / ((.2 + soft) * (genital ? p.genitalCompliance * p.genitalScale ** 2 : 1));
       const side = this.rest[i * 3] > 0 ? 'Left' : 'Right';
       const muscle = p.buttMuscle * p['buttMuscle' + side], fat = p.buttFat * p['buttFat' + side];
       if (this.regions[i] === 9) this.support[i] *= (1 + this.buttAttachment[i] * 2.5) / p.buttCompliance * Math.sqrt(muscle) / Math.sqrt(fat);
+      if (this.regions[i] === 10) this.support[i] *= 1 + p.lumbarSupport * 3;
       this.bulge[i] = .006 * tension * soft * (this.regions[i] === 9 ? 1 - this.buttAttachment[i] : 1);
-      this.decay[i] = Math.exp(-(2 + (genital ? p.genitalDamping : this.regions[i] === 9 ? p.buttDamping : p.damping) * 36) * DT);
+      this.decay[i] = Math.exp(-(2 + (genital ? p.genitalDamping : this.regions[i] === 9 ? p.buttDamping : this.regions[i] === 10 ? p.lumbarDamping : p.damping) * 36) * DT);
       this.limits[i] = genital ? Math.min(.06, (this.sex === 'female' ? .010 : .035) * p.genitalScale) : (.006 + .055 * soft) * (this.regions[i] === 9 ? (1 - .65 * this.buttAttachment[i]) * Math.sqrt(fat) : 1);
     }
   }
   configure(values) {
-    const ranges = { stiffness: [1, 100], damping: [0, 1], gravity: [0, 2], tension: [0, 1], strength: [0.1, 3], radius: [0.03, 0.25], region: [-1, 9], genitalCompliance: [.5, 2], genitalDamping: [0, 1], genitalScale: [.55, 1.75], buttCompliance: [.5, 2], buttDamping: [0, 1], buttMuscle: [.75, 1.4], buttFat: [.5, 1.75], buttSide: [-1, 2], buttMuscleLeft: [.75, 1.4], buttMuscleRight: [.75, 1.4], buttFatLeft: [.5, 1.75], buttFatRight: [.5, 1.75] };
+    const ranges = { stiffness: [1, 100], damping: [0, 1], gravity: [0, 2], tension: [0, 1], strength: [0.1, 3], radius: [0.03, 0.25], region: [-1, 10], genitalCompliance: [.5, 2], genitalDamping: [0, 1], genitalScale: [.55, 1.75], buttCompliance: [.5, 2], buttDamping: [0, 1], buttMuscle: [.75, 1.4], buttFat: [.5, 1.75], buttSide: [-1, 2], buttMuscleLeft: [.75, 1.4], buttMuscleRight: [.75, 1.4], buttFatLeft: [.5, 1.75], buttFatRight: [.5, 1.75], lumbarCoupling: [0, 1], lumbarSupport: [0, 1], lumbarDamping: [0, 1] };
     let changed = false;
     for (const [key, value] of Object.entries(values)) {
       if (!ranges[key] || !Number.isFinite(value)) continue;
@@ -121,15 +153,15 @@ export class TissueSystem {
       const j = i * 3, distance = Math.hypot(this.rest[j] + this.offset[j] - point[0], this.rest[j + 1] + this.offset[j + 1] - point[1], this.rest[j + 2] + this.offset[j + 2] - point[2]);
       if (distance < closest) { closest = distance; nearest = i; }
     }
-    if (nearest >= 0 && this.regions[nearest] === 9 && Math.abs(point[0]) > 1e-6) {
+    if (nearest >= 0 && [9, 10].includes(this.regions[nearest]) && Math.abs(point[0]) > 1e-6) {
       this.lastButtSide = Math.sign(point[0]); this.refreshCoefficients();
     }
-    const touchedButtock = nearest >= 0 && this.regions[nearest] === 9;
+    const touchedPosterior = nearest >= 0 && [9, 10].includes(this.regions[nearest]);
     const brushSide = this.parameters.buttSide === 2 ? 0 : this.parameters.buttSide || this.lastButtSide;
     for (let i = 0; i < this.count; i++) {
       if (!this.selected(i)) continue;
       const j = 3 * i;
-      if (touchedButtock && brushSide && this.rest[j] * brushSide <= 0) continue;
+      if (touchedPosterior && brushSide && this.rest[j] * brushSide <= 0) continue;
       const distance = Math.hypot(this.rest[j] + this.offset[j] - point[0], this.rest[j + 1] + this.offset[j + 1] - point[1], this.rest[j + 2] + this.offset[j + 2] - point[2]);
       if (distance < radius) {
         ids.push(i); weights.push((1 - (distance / radius) ** 2) ** 2);
@@ -186,6 +218,16 @@ export class TissueSystem {
       for (let axis = 0; axis < 3; axis++) {
         const ia = a * 3 + axis, ib = b * 3 + axis;
         const force = (d[ib] - d[ia]) * k;
+        f[ia] += force; f[ib] -= force;
+      }
+    }
+    // Reciprocal force transfer: pulling either end loads the other. No mirrored
+    // offsets or direct stimulation of the unselected region is involved.
+    const lumbarK = (120 + stiffness * 5) * this.parameters.lumbarCoupling;
+    for (let e = 0; e < this.lumbarLinks.length; e += 2) {
+      const a = this.lumbarLinks[e], b = this.lumbarLinks[e + 1], k = lumbarK * this.lumbarFactors[e / 2];
+      for (let axis = 0; axis < 3; axis++) {
+        const ia = a * 3 + axis, ib = b * 3 + axis, force = (d[ib] - d[ia]) * k;
         f[ia] += force; f[ib] -= force;
       }
     }

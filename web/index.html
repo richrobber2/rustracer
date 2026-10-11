@@ -47,21 +47,24 @@
           <label class="slider-label" for="tissue-gravity">Gravity <output id="tissue-gravity-value">0.3×</output></label><input id="tissue-gravity" type="range" min="0" max="2" step="0.1" value="0.3">
           <label class="slider-label" for="tissue-radius">Touch radius <output id="tissue-radius-value">10 cm</output></label><input id="tissue-radius" type="range" min="0.03" max="0.25" step="0.01" value="0.1">
           <label class="slider-label" for="tissue-strength">Touch strength <output id="tissue-strength-value">1.0×</output></label><input id="tissue-strength" type="range" min="0.1" max="3" step="0.1" value="1">
-          <details class="genital-controls" open><summary>Buttock tissue response</summary>
+          <details class="genital-controls" open><summary>Buttock & lower-back response</summary>
           <label class="select-label" for="tissue-buttSide">Side · as seen from the rear<select id="tissue-buttSide"><option value="0" selected>Auto · last touched side</option><option value="1">Rear-view left</option><option value="-1">Rear-view right</option><option value="2">Both sides</option></select></label>
           <label class="slider-label" for="tissue-buttCompliance">Compliance <output id="tissue-buttCompliance-value">1.0×</output></label><input id="tissue-buttCompliance" type="range" min="0.5" max="2" step="0.05" value="1">
           <label class="slider-label" for="tissue-buttDamping">Damping <output id="tissue-buttDamping-value">50%</output></label><input id="tissue-buttDamping" type="range" min="0" max="1" step="0.05" value="0.5">
-          <p class="hint">Firmer support near the midline and upper pelvis; softer outer tissue. Choose Buttocks to isolate touch and muscle support. Auto follows the side you touch; pulses and vibration use that side. Both sides is explicit.</p></details>
+          <label class="slider-label" for="tissue-lumbarCoupling">Pelvis-to-back coupling <output id="tissue-lumbarCoupling-value">65%</output></label><input id="tissue-lumbarCoupling" type="range" min="0" max="1" step="0.05" value="0.65">
+          <label class="slider-label" for="tissue-lumbarSupport">Lower-back support <output id="tissue-lumbarSupport-value">35%</output></label><input id="tissue-lumbarSupport" type="range" min="0" max="1" step="0.05" value="0.35">
+          <label class="slider-label" for="tissue-lumbarDamping">Lower-back damping <output id="tissue-lumbarDamping-value">65%</output></label><input id="tissue-lumbarDamping" type="range" min="0" max="1" step="0.05" value="0.65">
+          <p class="hint">Choose Buttocks or Lower back to touch one region and watch its neighbor respond. Coupling transfers movement both ways on the same side; 0% removes these links. Lower-back support approximates the stabilizing role of erector spinae and multifidus. Auto follows the side you touch; Both sides is explicit. These are surface response proxies.</p></details>
           <details class="genital-controls" open><summary>Genital tissue response</summary>
           <label class="slider-label" for="tissue-genitalCompliance">Compliance <output id="tissue-genitalCompliance-value">1.0×</output></label><input id="tissue-genitalCompliance" type="range" min="0.5" max="2" step="0.05" value="1">
           <label class="slider-label" for="tissue-genitalDamping">Damping <output id="tissue-genitalDamping-value">50%</output></label><input id="tissue-genitalDamping" type="range" min="0" max="1" step="0.05" value="0.5">
           <p class="hint">External tissue with a supported attachment. Proportions also change its response and movement limit.</p></details>
           <section class="buttock-map-panel" aria-labelledby="buttock-map-title">
-          <h3 id="buttock-map-title">2D buttock displacement</h3>
-          <canvas id="buttock-map" width="320" height="190" role="img" aria-label="Rear projection of buttock tissue samples colored by displacement magnitude"></canvas>
+          <h3 id="buttock-map-title">2D pelvis & lower back</h3>
+          <canvas id="buttock-map" width="320" height="240" role="img" aria-label="Rear projection of buttock and lower-back tissue samples colored by displacement magnitude"></canvas>
           <div class="map-legend"><span>0 mm</span><span>25 mm</span><span>50+ mm</span></div>
           <p id="buttock-map-status" class="hint" role="status">Choose a body to see tissue samples.</p>
-          <p class="hint">Rear projection · each dot is a cage sample. Color shows movement from the edited rest shape, not stress or pressure. Press, pull, or pulse the body to compare. Map updates at 10 Hz.</p>
+          <p class="hint">Lower back above, buttocks below · each dot is a cage sample. Color shows movement from the edited rest shape, not stress or pressure. Select Buttocks and pulse to see transfer into the back. Map updates at 10 Hz.</p>
           </section>
           <label class="select-label" for="tissue-region">Region for touch, pulse & support<select id="tissue-region"><option value="-1">Whole body</option></select></label>
           <label class="select-label" for="tissue-rate">Surface lighting updates<select id="tissue-rate"><option value="15">Responsive · 15 Hz</option><option value="30" selected>Balanced · 30 Hz</option><option value="60">Detailed · 60 Hz</option></select></label><label class="select-label" for="tissue-view">Surface view<select id="tissue-view"><option value="skin">Skin</option><option value="clay">Clay</option><option value="heat">Displacement · blue 0 to red 50 mm</option><option value="wire">Wireframe</option></select></label>

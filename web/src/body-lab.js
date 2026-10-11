@@ -32,7 +32,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   const plane = new THREE.Plane(), worldPoint = new THREE.Vector3(), localPoint = new THREE.Vector3(), normal = new THREE.Vector3();
   const canvas = renderer.domElement;
   const buttockMap = new ButtockMap($('buttock-map'), $('buttock-map-status'));
-  const settings = ['stiffness', 'damping', 'gravity', 'tension', 'radius', 'strength', 'genitalCompliance', 'genitalDamping', 'buttCompliance', 'buttDamping'];
+  const settings = ['stiffness', 'damping', 'gravity', 'tension', 'radius', 'strength', 'genitalCompliance', 'genitalDamping', 'buttCompliance', 'buttDamping', 'lumbarCoupling', 'lumbarSupport', 'lumbarDamping'];
   const parameterValues = () => ({ ...Object.fromEntries(settings.map(id => [id, Number($(`tissue-${id}`).value)])), buttSide: Number($('tissue-buttSide').value) });
   function setButtons() {
     $('tissue-pause').textContent = current?.system.paused ? 'Resume physics' : 'Pause physics';
@@ -145,7 +145,18 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
     const label = document.createElement('label'); label.className = 'slider-label'; label.htmlFor = `shape-${p.id}`; label.textContent = p.label;
     const output = document.createElement('output'); output.id = `shape-${p.id}-value`; output.value = '100%'; label.append(output);
     const input = document.createElement('input'); input.id = `shape-${p.id}`; input.type = 'range'; input.min = p.min; input.max = p.max; input.step = '.01'; input.value = '1';
-    input.oninput = () => { shape[p.id] = Number(input.value); output.value = `${Math.round(shapeValue(p.id) * 100)}%`; pendingShape = true; requestRealtime(); };
+    input.oninput = () => {
+      const side = $('shape-buttSide').value;
+      const bilateral = !['gluteMuscle', 'buttFat'].includes(p.id) || side === 'Both';
+      const changedSide = bilateral ? 0 : side === 'Left' ? 1 : -1;
+      pendingSide = pendingShape && pendingSide !== changedSide ? 0 : changedSide;
+      if (bilateral) {
+        shape[p.id] = Number(input.value);
+        delete shape[p.id + 'Left']; delete shape[p.id + 'Right'];
+      } else shape[p.id + side] = Number(input.value);
+      output.value = `${Math.round(shapeValue(p.id) * 100)}%`;
+      pendingShape = true; requestRealtime();
+    };
     row.append(label, input); $('proportion-controls').append(row);
   }
   $('shape-buttSide').onchange = displayShape;
@@ -261,7 +272,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   for (const button of document.querySelectorAll('[data-body]')) button.onclick = () => load(button.dataset.body);
   for (const button of document.querySelectorAll('[data-tissue-tool]')) button.onclick = () => setTool(button.dataset.tissueTool);
   function formatParameter(id, value) {
-    return id === 'radius' ? `${Math.round(value * 100)} cm` : id === 'stiffness' ? String(value) : ['damping', 'tension', 'genitalDamping', 'buttDamping'].includes(id) ? `${Math.round(value * 100)}%` : `${value.toFixed(1)}×`;
+    return id === 'radius' ? `${Math.round(value * 100)} cm` : id === 'stiffness' ? String(value) : ['damping', 'tension', 'genitalDamping', 'buttDamping', 'lumbarCoupling', 'lumbarSupport', 'lumbarDamping'].includes(id) ? `${Math.round(value * 100)}%` : `${value.toFixed(1)}×`;
   }
   for (const id of settings) {
     $(`tissue-${id}`).oninput = () => {
@@ -281,11 +292,11 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   $('tissue-pause').onclick = () => current?.system.paused ? resume() : pause();
   $('tissue-reset').onclick = () => { if (current) { endPointer(); current.system.reset(); current.system.vibration = false; setButtons(); updateSurface(true); requestRealtime(); } };
   $('tissue-impulse').onclick = () => {
-    if (current?.system.parameters.region === 9 && !current.system.parameters.buttSide && !current.system.lastButtSide) { notify('Touch one buttock first, or choose a side for the pulse.'); return; }
+    if ([9, 10].includes(current?.system.parameters.region) && !current.system.parameters.buttSide && !current.system.lastButtSide) { notify('Touch a buttock or the lower back first, or choose a side for the pulse.'); return; }
     resume(); current?.system.impulse();
   };
   $('tissue-vibrate').onclick = () => { if (current) {
-    if (!current.system.vibration && current.system.parameters.region === 9 && !current.system.parameters.buttSide && !current.system.lastButtSide) { notify('Touch one buttock first, or choose a side for vibration.'); return; }
+    if (!current.system.vibration && [9, 10].includes(current.system.parameters.region) && !current.system.parameters.buttSide && !current.system.lastButtSide) { notify('Touch a buttock or the lower back first, or choose a side for vibration.'); return; }
     resume(); current.system.vibration = !current.system.vibration; setButtons(); } };
   $('tissue-view').onchange = () => { requestRealtime(); applyView(); };
   function updateRay(event) {
