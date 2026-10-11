@@ -91,6 +91,57 @@ test.describe('mannequin skin deformation', () => {
     expect(helper.angleTo(bones.shin_L.quaternion)).toBeCloseTo(0.9, 5);
   });
 
+  // Muscle, the limb it lies on (from joint to end joint), the bone whose bend works it, and the
+  // side of the limb it sits on.
+  const MUSCLE_CASES = [
+    ['biceps_L', 'upperArm_L', 'forearm_L', 'forearm_L', -2.0, [0, 0, 1]],
+    ['hamstring_R', 'thigh_R', 'shin_R', 'shin_R', 2.0, [0, 0, -1]],
+    ['calf_L', 'shin_L', 'foot_L', 'shin_L', 2.0, [0, 0, -1]],
+  ];
+
+  // Moves posed skin back into the limb's rest frame, so only deformation relative to the limb
+  // remains, and measures how far each muscle vertex sits from the limb's axis on the muscle side.
+  function bellyProfile(mesh, probe, bones, muscle, limb, end, facing) {
+    const { skinIndex, skinWeight } = mesh.geometry.attributes;
+    const k = mesh.skeleton.bones.indexOf(bones[muscle]);
+    const limbIndex = mesh.skeleton.bones.indexOf(bones[limb]);
+    // Only skin carried by the limb and its muscle alone; near a joint the neighbouring bones move it too.
+    const carried = (i) => [0, 1, 2, 3].filter((c) => skinWeight.getComponent(i, c) > 0).map((c) => skinIndex.getComponent(i, c));
+    const belly = probe.rest.map((_, i) => i).filter((i) => carried(i).includes(k) && carried(i).every((b) => b === k || b === limbIndex));
+    const posed = skinned(mesh, probe.rest);
+    const toRest = new THREE.Matrix4().multiplyMatrices(bones[limb].matrixWorld, mesh.skeleton.boneInverses[limbIndex]).invert();
+    const a = probe.restJoint(limb), axis = probe.restJoint(end).sub(a).normalize(), side = new THREE.Vector3(...facing);
+    const radial = (p) => { const o = p.clone().sub(a); return o.addScaledVector(axis, -o.dot(axis)); };
+    return belly.map((i) => {
+      const before = radial(probe.rest[i]), after = radial(posed[i].clone().applyMatrix4(toRest));
+      return { swell: after.length() - before.length(), outward: before.dot(side), radius: before.length() };
+    });
+  }
+
+  for (const [muscle, limb, end, driver, angle, facing] of MUSCLE_CASES) {
+    test(`${muscle} bulges on its own side as ${driver} bends, and grows with the bend`, () => {
+      const { mesh, bones, probe } = rig();
+      const atRest = bellyProfile(mesh, probe, bones, muscle, limb, end, facing);
+      expect(atRest.length).toBeGreaterThan(50);
+      expect(Math.max(...atRest.map((v) => Math.abs(v.swell)))).toBeLessThan(1e-5);
+      bones[driver].rotation.x = angle / 2;
+      const halfway = Math.max(...bellyProfile(mesh, probe, bones, muscle, limb, end, facing).map((v) => v.swell));
+      bones[driver].rotation.x = angle;
+      const profile = bellyProfile(mesh, probe, bones, muscle, limb, end, facing);
+      const peak = profile.reduce((best, v) => (v.swell > best.swell ? v : best));
+      // A visible swell of at least an eighth of the limb's radius, centred on the muscle's side.
+      expect(peak.swell / peak.radius).toBeGreaterThan(0.125);
+      expect(peak.outward / peak.radius).toBeGreaterThan(0.7);
+      expect(halfway).toBeGreaterThan(0);
+      expect(halfway).toBeLessThan(peak.swell);
+      // Muscle swells push skin out; no part of the belly is pulled in toward the bone.
+      expect(Math.min(...profile.map((v) => v.swell))).toBeGreaterThan(-0.002);
+      // Straightening the joint lets the muscle relax completely.
+      bones[driver].rotation.x = 0;
+      expect(Math.max(...bellyProfile(mesh, probe, bones, muscle, limb, end, facing).map((v) => Math.abs(v.swell)))).toBeLessThan(1e-5);
+    });
+  }
+
   for (const [label, bone, axis, angle] of RANGE) {
     test(`${label}: bones stay under the skin and the surface bends without tearing`, () => {
       const { mesh, bones, probe } = rig();

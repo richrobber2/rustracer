@@ -115,5 +115,11 @@ export function skinProbe(mesh) {
     });
   }
 
-  return { rest, shells, pose, inside, boneDepths };
+  // A bone's joint position in the bind pose.
+  const restJoint = (bone) => {
+    const k = mesh.skeleton.bones.findIndex((b) => b.name === bone);
+    return new THREE.Vector3().applyMatrix4(mesh.skeleton.boneInverses[k].clone().invert());
+  };
+
+  return { rest, shells, pose, inside, boneDepths, restJoint };
 }

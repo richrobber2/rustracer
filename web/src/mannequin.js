@@ -102,8 +102,32 @@ function setSkin(geometry, weightsFor) {
 // "collapse" of plain linear blend skinning).
 const half = (name) => `${name}_half`;
 
+// Muscles bulge as the joint that works them bends. Each belly has a bulge bone parented to the
+// limb bone: at rest it moves exactly with the limb, and as its driving joint flexes it scales up
+// across the limb and shortens along it, as a contracting muscle keeps its volume. Skin over the
+// belly, on the side the muscle sits, is partly weighted to it. A bone scale goes through the same
+// skinning path everywhere, so the bulge appears in the interactive view, the path tracer and tests.
+const MUSCLES = ['L', 'R'].flatMap((side) => [
+  // Biceps: front of the upper arm, worked by elbow flexion (the forearm pitches forward, -x).
+  { name: `biceps_${side}`, bone: `upperArm_${side}`, end: `forearm_${side}`, driver: `forearm_${side}`, flexion: -1,
+    range: 2.3, gain: 1.0, center: 0.5, width: 0.36, facing: [0, 0, 1] },
+  // Hamstrings: back of the thigh, worked by knee flexion (the shin pitches back, +x).
+  { name: `hamstring_${side}`, bone: `thigh_${side}`, end: `shin_${side}`, driver: `shin_${side}`, flexion: 1,
+    range: 2.3, gain: 0.65, center: 0.55, width: 0.38, facing: [0, 0, -1] },
+  // Calf: upper back of the shin, pressed and bunched as the knee folds.
+  { name: `calf_${side}`, bone: `shin_${side}`, end: `foot_${side}`, driver: `shin_${side}`, flexion: 1,
+    range: 2.3, gain: 0.6, center: 0.3, width: 0.26, facing: [0, 0, -1] },
+]);
+for (const muscle of MUSCLES) {
+  const a = joint[muscle.bone].position, b = joint[muscle.end].position;
+  muscle.axis = b.clone().sub(a).normalize();
+  muscle.length = a.distanceTo(b);
+  muscle.position = a.clone().lerp(b, muscle.center);
+  muscle.facing = new THREE.Vector3(...muscle.facing);
+}
+
 function buildBones() {
-  const bones = new Map(), helpers = [];
+  const bones = new Map(), helpers = [], muscles = [];
   for (const [name, parent] of BONES) {
     const bone = new THREE.Bone();
     bone.name = name;
@@ -120,12 +144,33 @@ function buildBones() {
     bones.set(helper.name, helper);
     helpers.push([helper, bone]);
   }
-  return { bones, helpers };
+  for (const muscle of MUSCLES) {
+    const bulge = new THREE.Bone();
+    bulge.name = muscle.name;
+    bulge.position.copy(muscle.position).sub(joint[muscle.bone].position);
+    // Local +Y runs along the limb, so scaling x and z swells the belly across it.
+    bulge.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), muscle.axis);
+    bones.get(muscle.bone).add(bulge);
+    bones.set(bulge.name, bulge);
+    muscles.push({ bone: bulge, driver: bones.get(muscle.driver), muscle });
+  }
+  return { bones, helpers, muscles };
+}
+
+const flexEuler = new THREE.Euler();
+// How far a muscle's driving joint is bent toward flexion, from 0 (straight) to 1 (fully bent).
+export function contraction(driver, muscle) {
+  flexEuler.setFromQuaternion(driver.quaternion, 'YXZ');
+  return THREE.MathUtils.smoothstep(flexEuler.x * muscle.flexion, 0, muscle.range);
 }
 
 class RiggedMesh extends THREE.SkinnedMesh {
   updateMatrixWorld(force) {
     for (const [helper, bone] of this.helpers) helper.quaternion.slerpQuaternions(IDENTITY, bone.quaternion, 0.5);
+    for (const { bone, driver, muscle } of this.muscles) {
+      const swell = 1 + muscle.gain * contraction(driver, muscle);
+      bone.scale.set(swell, 1 / Math.sqrt(swell), swell);
+    }
     super.updateMatrixWorld(force);
   }
 }
@@ -155,8 +200,21 @@ function buildGeometry(boneIndex) {
       if (segment.start) add(across(segment.start, segment.bone, vertex));
       if (segment.end) add(across(segment.bone, segment.end, vertex));
       // Away from the joints the segment follows its own bone rigidly.
-      const own = (weights.get(segment.bone) || 0) + 1 - [...weights.values()].reduce((sum, w) => sum + w, 0);
-      weights.set(segment.bone, Math.max(0, own));
+      let own = Math.max(0, (weights.get(segment.bone) || 0) + 1 - [...weights.values()].reduce((sum, w) => sum + w, 0));
+      // Over a muscle belly, part of that share follows the bulge bone instead. The share fades to
+      // nothing before the joints and around to the opposite side of the limb.
+      for (const muscle of MUSCLES) {
+        if (muscle.bone !== segment.bone) continue;
+        const along = offset.subVectors(vertex, joint[muscle.bone].position).dot(muscle.axis);
+        const belly = Math.max(0, 1 - ((along / muscle.length - muscle.center) / muscle.width) ** 2) ** 2;
+        const radial = offset.addScaledVector(muscle.axis, -along).normalize();
+        const side = ((1 + radial.dot(muscle.facing)) / 2) ** 2;
+        const share = own * belly * side;
+        if (share <= 0) continue;
+        own -= share;
+        weights.set(muscle.name, share);
+      }
+      weights.set(segment.bone, own);
       return [...weights].map(([bone, w]) => [boneIndex.get(bone), w]).sort((a, b) => b[1] - a[1]);
     });
   });
@@ -286,18 +344,69 @@ function idle(p) {
   return { rotate, hips: [0.02 * sway, 0, 0] };
 }
 
+// Alternating curls take each elbow from nearly straight to fully bent, so the biceps swells and
+// relaxes in turn.
+function curl(p) {
+  const rotate = {
+    hips: [0, 0, 0],
+    spine: [0.03, 0.04 * Math.sin(p), 0],
+    chest: [0.02, 0.05 * Math.sin(p), 0],
+    neck: [0, -0.04 * Math.sin(p), 0],
+    head: [0.05, -0.05 * Math.sin(p), 0],
+  };
+  for (const [side, phase] of [['L', p], ['R', p + Math.PI]]) {
+    const bend = 0.1 + 2.1 * (1 - Math.cos(phase)) / 2;
+    rotate[`shoulder_${side}`] = [0, 0, 0];
+    // The upper arm stays by the body, drifting slightly forward at the top of the curl.
+    rotate[`upperArm_${side}`] = [-0.12 * bend / 2.2, 0, ARMS_DOWN[side]];
+    rotate[`forearm_${side}`] = [-bend, 0, 0];
+    rotate[`hand_${side}`] = [-0.25 * bend / 2.2, 0, 0];
+    rotate[`thigh_${side}`] = [-0.04, 0, 0];
+    rotate[`shin_${side}`] = [0.08, 0, 0];
+    rotate[`foot_${side}`] = [-0.04, 0, 0];
+  }
+  return { rotate, hips: [0, 0, 0] };
+}
+
+// A slow squat: knees fold deeply (hamstrings and calves bulge) while the feet stay flat, the hips
+// sit back and the arms reach forward to keep the weight over the feet.
+function squat(p) {
+  const depth = (1 - Math.cos(p)) / 2;
+  const thigh = -1.45 * depth, knee = 1.95 * depth;
+  const rotate = {
+    hips: [0, 0, 0],
+    spine: [0.32 * depth, 0, 0],
+    chest: [0.12 * depth, 0, 0],
+    neck: [-0.2 * depth, 0, 0],
+    head: [-0.18 * depth, 0, 0],
+  };
+  for (const side of ['L', 'R']) {
+    rotate[`thigh_${side}`] = [thigh, 0, (side === 'L' ? -1 : 1) * 0.12 * depth];
+    rotate[`shin_${side}`] = [knee, 0, 0];
+    // Keeps the sole level: the foot cancels the thigh and shin pitch.
+    rotate[`foot_${side}`] = [-(thigh + knee), 0, 0];
+    rotate[`upperArm_${side}`] = [-1.35 * depth, 0, ARMS_DOWN[side]];
+    rotate[`forearm_${side}`] = [-0.15 * depth, 0, 0];
+  }
+  return { rotate, hips: [0, 0, -0.16 * depth] };
+}
+
 export function createMannequin(materials) {
-  const { bones, helpers } = buildBones();
+  const { bones, helpers, muscles } = buildBones();
   const ordered = [...bones.values()];
   const boneIndex = new Map(ordered.map((bone, i) => [bone.name, i]));
   const mesh = new RiggedMesh(buildGeometry(boneIndex), materials);
   mesh.helpers = helpers;
+  mesh.muscles = muscles;
   mesh.name = 'Mannequin';
   mesh.add(bones.get('hips'));
   mesh.updateMatrixWorld(true);
   mesh.bind(new THREE.Skeleton(ordered));
   // Skinned bounds move with the pose; culling against the bind pose could clip raised arms.
   mesh.frustumCulled = false;
-  const clips = [clip(bones, 'Walk cycle', 1.15, walk), clip(bones, 'Wave', 1.6, wave), clip(bones, 'Idle', 4, idle, 48)];
+  const clips = [
+    clip(bones, 'Walk cycle', 1.15, walk), clip(bones, 'Wave', 1.6, wave), clip(bones, 'Idle', 4, idle, 48),
+    clip(bones, 'Biceps curl', 3.2, curl, 48), clip(bones, 'Squat', 3.6, squat, 48),
+  ];
   return { mesh, clips };
 }
