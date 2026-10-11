@@ -27,6 +27,7 @@
         <fieldset id="creator-fields" disabled><div id="proportion-controls"></div>
         <p class="hint">Values are relative to the base body. Editing proportions resets tissue to its new resting shape.</p>
         <div class="preset-row"><button id="proportions-reset">Reset shape</button><button id="proportions-random">Randomize</button><button id="focus-pelvis">Focus pelvis</button><button id="focus-buttocks">Rear view</button></div>
+        <p class="hint">Muscle bulk and fat padding are separate shape and support approximations, relative to this base. Internal tissue layers and mass are not measured.</p>
         <h3 class="saved-title">Character presets</h3>
         <div class="save-slots"><div><span>A</span><button data-save-character="a">Save A</button><button data-load-character="a">Load A</button></div><div><span>B</span><button data-save-character="b">Save B</button><button data-load-character="b">Load B</button></div></div>
         <div class="preset-row"><button id="character-export">Export preset</button><button id="character-import">Import preset</button></div>
@@ -54,6 +55,13 @@
           <label class="slider-label" for="tissue-genitalCompliance">Compliance <output id="tissue-genitalCompliance-value">1.0×</output></label><input id="tissue-genitalCompliance" type="range" min="0.5" max="2" step="0.05" value="1">
           <label class="slider-label" for="tissue-genitalDamping">Damping <output id="tissue-genitalDamping-value">50%</output></label><input id="tissue-genitalDamping" type="range" min="0" max="1" step="0.05" value="0.5">
           <p class="hint">External tissue with a supported attachment. Proportions also change its response and movement limit.</p></details>
+          <section class="buttock-map-panel" aria-labelledby="buttock-map-title">
+          <h3 id="buttock-map-title">2D buttock displacement</h3>
+          <canvas id="buttock-map" width="320" height="190" role="img" aria-label="Rear projection of buttock tissue samples colored by displacement magnitude"></canvas>
+          <div class="map-legend"><span>0 mm</span><span>25 mm</span><span>50+ mm</span></div>
+          <p id="buttock-map-status" class="hint" role="status">Choose a body to see tissue samples.</p>
+          <p class="hint">Rear projection · each dot is a cage sample. Color shows movement from the edited rest shape, not stress or pressure. Press, pull, or pulse the body to compare. Map updates at 10 Hz.</p>
+          </section>
           <label class="select-label" for="tissue-region">Region for touch, pulse & support<select id="tissue-region"><option value="-1">Whole body</option></select></label>
           <label class="select-label" for="tissue-rate">Surface lighting updates<select id="tissue-rate"><option value="15">Responsive · 15 Hz</option><option value="30" selected>Balanced · 30 Hz</option><option value="60">Detailed · 60 Hz</option></select></label><label class="select-label" for="tissue-view">Surface view<select id="tissue-view"><option value="skin">Skin</option><option value="clay">Clay</option><option value="heat">Displacement · blue 0 to red 50 mm</option><option value="wire">Wireframe</option></select></label>
           <div class="preset-row"><button id="tissue-impulse">Pulse</button><button id="tissue-vibrate" aria-pressed="false">Vibration</button><button id="tissue-reset">Reset tissue</button></div>

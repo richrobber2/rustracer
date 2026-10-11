@@ -38,7 +38,7 @@ export class TissueSystem {
     this.degree = new Uint16Array(this.count);
     for (const id of this.edges) this.degree[id]++;
     for (let e = 0; e < this.edges.length; e += 2) this.edgeFactors[e / 2] = 1 / Math.sqrt(Math.max(1, this.degree[this.edges[e]] * this.degree[this.edges[e + 1]]));
-    this.parameters = { stiffness: 45, damping: 0.5, gravity: 0.3, tension: 0, strength: 1, radius: 0.10, region: -1, genitalCompliance: 1, genitalDamping: .5, genitalScale: 1, buttCompliance: 1, buttDamping: .5 };
+    this.parameters = { stiffness: 45, damping: 0.5, gravity: 0.3, tension: 0, strength: 1, radius: 0.10, region: -1, genitalCompliance: 1, genitalDamping: .5, genitalScale: 1, buttCompliance: 1, buttDamping: .5, buttMuscle: 1, buttFat: 1 };
     this.paused = false;
     this._vibration = false;
     this.sleeping = false; this.quietTime = 0;
@@ -58,14 +58,14 @@ export class TissueSystem {
       const genital = this.regions[i] === 8, soft = this.softness[i];
       const tension = (p.region < 0 || this.regions[i] === p.region) && this.regions[i] > 0 && (this.regions[i] < 7 || this.regions[i] === 9) ? p.tension : 0;
       this.support[i] = (100 + p.stiffness * 8) * (1 + tension * 2) / ((.2 + soft) * (genital ? p.genitalCompliance * p.genitalScale ** 2 : 1));
-      if (this.regions[i] === 9) this.support[i] *= (1 + this.buttAttachment[i] * 2.5) / p.buttCompliance;
+      if (this.regions[i] === 9) this.support[i] *= (1 + this.buttAttachment[i] * 2.5) / p.buttCompliance * Math.sqrt(p.buttMuscle) / Math.sqrt(p.buttFat);
       this.bulge[i] = .006 * tension * soft * (this.regions[i] === 9 ? 1 - this.buttAttachment[i] : 1);
       this.decay[i] = Math.exp(-(2 + (genital ? p.genitalDamping : this.regions[i] === 9 ? p.buttDamping : p.damping) * 36) * DT);
-      this.limits[i] = genital ? Math.min(.06, (this.sex === 'female' ? .010 : .035) * p.genitalScale) : (.006 + .055 * soft) * (this.regions[i] === 9 ? 1 - .65 * this.buttAttachment[i] : 1);
+      this.limits[i] = genital ? Math.min(.06, (this.sex === 'female' ? .010 : .035) * p.genitalScale) : (.006 + .055 * soft) * (this.regions[i] === 9 ? (1 - .65 * this.buttAttachment[i]) * Math.sqrt(p.buttFat) : 1);
     }
   }
   configure(values) {
-    const ranges = { stiffness: [1, 100], damping: [0, 1], gravity: [0, 2], tension: [0, 1], strength: [0.1, 3], radius: [0.03, 0.25], region: [-1, 9], genitalCompliance: [.5, 2], genitalDamping: [0, 1], genitalScale: [.55, 1.75], buttCompliance: [.5, 2], buttDamping: [0, 1] };
+    const ranges = { stiffness: [1, 100], damping: [0, 1], gravity: [0, 2], tension: [0, 1], strength: [0.1, 3], radius: [0.03, 0.25], region: [-1, 9], genitalCompliance: [.5, 2], genitalDamping: [0, 1], genitalScale: [.55, 1.75], buttCompliance: [.5, 2], buttDamping: [0, 1], buttMuscle: [.75, 1.4], buttFat: [.5, 1.75] };
     let changed = false;
     for (const [key, value] of Object.entries(values)) {
       if (!ranges[key] || !Number.isFinite(value)) continue;

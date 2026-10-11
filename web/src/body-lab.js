@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { TissueSystem } from './tissue-physics.js';
+import { ButtockMap } from './buttock-map.js';
 import { SurfaceDeformer } from './surface-deformer.js';
 import { BodyMorph, PROPORTIONS, DEFAULT_PROPORTIONS, sanitizeProportions, readCharacter } from './body-proportions.js';
 
@@ -28,6 +29,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   const raycaster = new THREE.Raycaster(), screen = new THREE.Vector2();
   const plane = new THREE.Plane(), worldPoint = new THREE.Vector3(), localPoint = new THREE.Vector3(), normal = new THREE.Vector3();
   const canvas = renderer.domElement;
+  const buttockMap = new ButtockMap($('buttock-map'), $('buttock-map-status'));
   const settings = ['stiffness', 'damping', 'gravity', 'tension', 'radius', 'strength', 'genitalCompliance', 'genitalDamping', 'buttCompliance', 'buttDamping'];
   const parameterValues = () => Object.fromEntries(settings.map(id => [id, Number($(`tissue-${id}`).value)]));
   function setButtons() {
@@ -55,7 +57,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   function detach() {
     serial++; endPointer();
     if (current) current.mesh.material.map = current.skinMap;
-    current = null; pendingShape = false;
+    current = null; pendingShape = false; buttockMap.clear();
     $('tissue-fields').disabled = true; $('creator-fields').disabled = true; loadController?.abort();
     $('body-model').value = '';
     $('tissue-status').textContent = 'Choose a body to start the tissue experiment.';
@@ -96,6 +98,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
     if (!current) return;
     endPointer(); pendingShape = false;
     current.deformer.setRest(current.morph.apply(shape));
+    current.system.configure({ buttMuscle: shape.gluteMuscle, buttFat: shape.buttFat });
     current.system.setRest(current.cageMorph.apply(shape), shape.height * Math.cbrt(shape.genitalLength * shape.genitalWidth ** 2));
     for (const { mesh, morph } of current.accessories) {
       mesh.geometry.attributes.position.array.set(morph.apply(shape));
@@ -104,6 +107,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
       mesh.boundingBox = null; mesh.boundingSphere = null;
     }
     updateSurface(true, true);
+    buttockMap.setSystem(current.system);
     current.mesh.geometry.computeBoundingBox(); current.mesh.geometry.computeBoundingSphere();
     current.mesh.geometry.boundingSphere.radius += .15;
     current.mesh.boundingBox = null; current.mesh.boundingSphere = null;
@@ -308,6 +312,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
       const start = performance.now();
       if (pendingShape) applyShape();
       const stepped = current.system.step(delta);
+      if (!$('physics-panel').hidden) buttockMap.update(now);
       const normals = now >= nextNormals || current.system.sleeping;
       let changed = false;
       if (stepped || (normals && current.deformer.normalsPending)) changed = updateSurface(normals);

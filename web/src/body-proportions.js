@@ -5,14 +5,17 @@ export const PROPORTIONS = [
   { id: 'chest', label: 'Chest volume', min: .75, max: 1.35 },
   { id: 'waist', label: 'Waist', min: .72, max: 1.4 },
   { id: 'hips', label: 'Hip breadth', min: .8, max: 1.35 },
-  { id: 'buttocks', label: 'Buttock fullness', min: .75, max: 1.4 },
+  { id: 'gluteMuscle', label: 'Gluteal muscle bulk · proxy', min: .75, max: 1.4 },
+  { id: 'buttFat', label: 'Buttock fat padding · proxy', min: .5, max: 1.75 },
   { id: 'thighs', label: 'Thigh volume', min: .8, max: 1.3 },
   { id: 'genitalLength', label: 'Genital length', min: .65, max: 1.5 },
   { id: 'genitalWidth', label: 'Genital width', min: .65, max: 1.5 },
 ];
-export const DEFAULT_PROPORTIONS = Object.fromEntries(PROPORTIONS.map(p => [p.id, 1]));
+export const DEFAULT_PROPORTIONS = { buttocks: 1, ...Object.fromEntries(PROPORTIONS.map(p => [p.id, 1])) };
 export function sanitizeProportions(value = {}) {
-  return Object.fromEntries(PROPORTIONS.map(p => [p.id, Number.isFinite(value[p.id]) ? Math.max(p.min, Math.min(p.max, value[p.id])) : 1]));
+  // Keep legacy fullness from existing presets; new controls start neutral.
+  return { buttocks: Number.isFinite(value.buttocks) ? Math.max(.75, Math.min(1.4, value.buttocks)) : 1,
+    ...Object.fromEntries(PROPORTIONS.map(p => [p.id, Number.isFinite(value[p.id]) ? Math.max(p.min, Math.min(p.max, value[p.id])) : 1])) };
 }
 const bell = (x, center, width) => Math.exp(-(((x - center) / width) ** 2));
 export class BodyMorph {
@@ -20,9 +23,9 @@ export class BodyMorph {
     this.base = new Float32Array(positions); this.result = this.base.slice();
     this.genital = new Float32Array(genitalWeights || positions.length / 3);
     this.anchor = data.genitalAnchor;
-    this.fields = new Float32Array(this.base.length / 3 * 6);
+    this.fields = new Float32Array(this.base.length / 3 * 7);
     for (let i = 0; i < this.base.length / 3; i++) {
-      const y = this.base[i * 3 + 1] / data.height, x = Math.abs(this.base[i * 3]) / data.height, at = i * 6;
+      const y = this.base[i * 3 + 1] / data.height, x = Math.abs(this.base[i * 3]) / data.height, at = i * 7;
       this.fields[at] = bell(y, .76, .10);
       this.fields[at + 1] = bell(y, .69, .065) * bell(x, 0, .15);
       this.fields[at + 2] = bell(y, .59, .065) * bell(x, 0, .15);
@@ -32,17 +35,18 @@ export class BodyMorph {
       const rear = Math.max(0, Math.min(1, -z / .035));
       const midline = 1 - Math.exp(-((x / .025) ** 2));
       this.fields[at + 5] = bell(y, .48, .055) * rear * midline * (1 - this.genital[i]);
+      this.fields[at + 6] = bell(y, .48, .070) * rear * midline * (1 - this.genital[i]);
     }
   }
   apply(input) {
     const p = sanitizeProportions(input), b = this.base, o = this.result, f = this.fields;
     for (let i = 0; i < b.length / 3; i++) {
-      const j = i * 3, k = i * 6, g = this.genital[i];
+      const j = i * 3, k = i * 7, g = this.genital[i];
       const breadth = 1 + (p.shoulders - 1) * f[k] + (p.chest - 1) * .35 * f[k + 1] + (p.waist - 1) * f[k + 2] + (p.hips - 1) * f[k + 3] + (p.thighs - 1) * .35 * f[k + 4];
       const depth = 1 + (p.chest - 1) * f[k + 1] + (p.waist - 1) * f[k + 2] + (p.hips - 1) * .45 * f[k + 3] + (p.thighs - 1) * f[k + 4];
       o[j] = b[j] * breadth * (1 + (p.genitalWidth - 1) * g);
       o[j + 1] = (b[j + 1] + (b[j + 1] - this.anchor[1]) * (p.genitalLength - 1) * g) * p.height;
-      o[j + 2] = (b[j + 2] + (b[j + 2] - this.anchor[2]) * (p.genitalWidth - 1) * g) * depth * (1 + (p.buttocks - 1) * f[k + 5]);
+      o[j + 2] = (b[j + 2] + (b[j + 2] - this.anchor[2]) * (p.genitalWidth - 1) * g) * depth * (1 + (p.buttocks - 1) * f[k + 5]) * (1 + .65 * (p.gluteMuscle - 1) * f[k + 5] + .35 * (p.buttFat - 1) * f[k + 6]);
     }
     return o;
   }
