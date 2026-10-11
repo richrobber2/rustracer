@@ -2,7 +2,6 @@ import './style.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { createMannequin } from './mannequin.js';
 
 const $ = (id) => document.getElementById(id);
 const host = $('canvas-host');
@@ -279,18 +278,16 @@ async function init() {
     porcelain.name = 'Porcelain';
     const teal = new THREE.MeshPhysicalMaterial({ color: '#347c78', metalness: 0.35, roughness: 0.22 });
     teal.name = 'Petrol green';
-    const { mesh: mannequin, clips } = createMannequin([gold, porcelain]);
-    mannequin.rotation.y = -0.35;
-    const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.45, 48, 32), porcelain);
-    sphere.position.set(-1.4, 0.45, 0.45);
-    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.34, 48, 32), teal);
-    orb.position.set(1.35, 0.34, 0.6);
+    const knot = new THREE.Mesh(new THREE.TorusKnotGeometry(0.62, 0.22, 120, 20), gold);
+    knot.position.set(0, 1.26, 0); knot.rotation.set(0.25, 0.15, 0.1);
+    const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.53, 48, 32), porcelain);
+    sphere.position.set(-1.28, 0.53, 0.35);
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.38, 48, 32), teal);
+    orb.position.set(1.25, 0.38, 0.55);
     const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.32, 64), new THREE.MeshStandardMaterial({ color: '#52606b', roughness: 0.62 }));
     pedestal.material.name = 'Slate pedestal'; pedestal.position.set(0, 0.16, 0);
-    group.add(mannequin, sphere, orb, pedestal);
-    replaceModel(group, 'Studio mannequin', clips);
-    // The rig is the point of the demo: start it moving unless the path tracer is showing a still.
-    if (mode === 'realtime') { playing = true; playClip(); $('play').textContent = 'Pause animation'; }
+    group.add(knot, sphere, orb, pedestal);
+    replaceModel(group, 'Studio collection');
   }
   makeDemo();
   $('demo').onclick = () => { ++importSerial; makeDemo(); notify('Studio scene restored.'); };

@@ -106,16 +106,56 @@ test('imports local glTF companions, plays animation and keeps demo available af
   expect(errors).toEqual([]);
 });
 
-test('demo mannequin is a skinned rig whose animation deforms the mesh', async ({ page }) => {
+function riggedFixture() {
+  // A triangle skinned to a two-joint chain, so the model carries a real skeleton.
+  const floats = new Float32Array([
+    -1, 0, 0, 1, 0, 0, 0, 2, 0,
+    0, 0, 1, 0, 0, 1, 0, 0, 1,
+    1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0,
+    1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, -1, 0, 1,
+  ]);
+  const joints = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0]);
+  const buffer = Buffer.concat([Buffer.from(floats.buffer), Buffer.from(joints.buffer)]);
+  const model = {
+    asset: { version: '2.0' }, scene: 0, scenes: [{ nodes: [0, 1] }],
+    nodes: [{ mesh: 0, skin: 0 }, { name: 'Root', children: [2] }, { name: 'Tip', translation: [0, 1, 0] }],
+    skins: [{ joints: [1, 2], inverseBindMatrices: 4 }],
+    buffers: [{ uri: 'rig.bin', byteLength: buffer.length }],
+    bufferViews: [
+      { buffer: 0, byteOffset: 0, byteLength: 36 },
+      { buffer: 0, byteOffset: 36, byteLength: 36 },
+      { buffer: 0, byteOffset: 72, byteLength: 48 },
+      { buffer: 0, byteOffset: 120, byteLength: 128 },
+      { buffer: 0, byteOffset: 248, byteLength: 12 },
+    ],
+    accessors: [
+      { bufferView: 0, componentType: 5126, count: 3, type: 'VEC3', min: [-1, 0, 0], max: [1, 2, 0] },
+      { bufferView: 1, componentType: 5126, count: 3, type: 'VEC3' },
+      { bufferView: 2, componentType: 5126, count: 3, type: 'VEC4' },
+      { bufferView: 4, componentType: 5121, count: 3, type: 'VEC4' },
+      { bufferView: 3, componentType: 5126, count: 2, type: 'MAT4' },
+    ],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0, NORMAL: 1, WEIGHTS_0: 2, JOINTS_0: 3 } }] }],
+  };
+  return { model, buffer };
+}
+
+test('rigged imports report their bones and can show the skeleton', async ({ page }) => {
   const errors = await open(page);
-  await expect(page.locator('#scene-stats')).toContainText('43 bones');
-  await expect(page.getByRole('button', { name: 'Pause animation' })).toBeVisible();
-  await expect(page.locator('#animation option')).toHaveText(['Walk cycle', 'Wave', 'Idle', 'Biceps curl', 'Squat']);
+  await expect(page.locator('#skeleton')).toBeDisabled();
+  const { model, buffer } = riggedFixture();
+  await page.locator('#files').setInputFiles([
+    { name: 'rig.gltf', mimeType: 'model/gltf+json', buffer: Buffer.from(JSON.stringify(model)) },
+    { name: 'rig.bin', mimeType: 'application/octet-stream', buffer },
+  ]);
+  await expect(page.locator('#model-name')).toHaveText('rig.gltf');
+  await expect(page.locator('#scene-stats')).toHaveText('1 meshes · 1 triangles · 2 bones');
+  await expect(page.locator('#skeleton')).toBeEnabled();
   await page.locator('#skeleton').check();
-  await page.getByRole('button', { name: 'Pause animation' }).click();
-  const still = await pixels(page);
-  await page.locator('#animation').selectOption('1');
-  await expect.poll(async () => (await pixels(page)).bright).not.toBe(still.bright);
+  await page.getByRole('button', { name: 'Studio demo', exact: false }).click();
+  await expect(page.locator('#scene-stats')).toHaveText(/^4 meshes · [\d,]+ triangles$/);
+  await expect(page.locator('#skeleton')).toBeDisabled();
   expect(errors).toEqual([]);
 });
 
