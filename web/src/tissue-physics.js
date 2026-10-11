@@ -1,6 +1,8 @@
 // An illustrative anchored surface spring network, not calibrated biomechanics.
 // Displacements are in meters. A fixed skeleton supports the rest surface.
-const SOFTNESS = [0.12, 0.8, 0.95, 0.9, 0.5, 0.7, 0.4, 0.06, 1, .9, .45];
+import { upperRegion, isSideRegion, upperBoundary, buildUpperLinks } from './upper-body.js';
+import { eligibleGrabAnchor } from './grab-points.js';
+const SOFTNESS = [0.12, 0.8, 0.95, 0.9, 0.5, 0.7, 0.4, 0.06, 1, .9, .45, .5, .55, .16];
 const DT = 1 / 120;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -16,6 +18,10 @@ export class TissueSystem {
     this.regionNames = [...(data.regionNames || [])];
     this.regionNames[9] = 'Buttocks';
     this.regionNames[10] = 'Lower back';
+    this.regionNames[7] = 'Feet';
+    this.regionNames[11] = 'Upper back';
+    this.regionNames[12] = 'Shoulders';
+    this.regionNames[13] = 'Hands / wrists';
     this.lastButtSide = 0;
     this.buttAttachment = new Float32Array(this.count);
     for (let i = 0; i < this.count; i++) {
@@ -27,6 +33,7 @@ export class TissueSystem {
         this.buttAttachment[i] = Math.max(midline, upper);
       }
       if (this.regions[i] === 2 && this.rest[j + 2] < 0 && this.normals[j + 2] < -.2) this.regions[i] = 10;
+      this.regions[i] = upperRegion(this.regions[i], this.rest[j], this.rest[j + 1], this.rest[j + 2], this.normals[j + 2], data.height);
     }
     this.offset = new Float32Array(this.rest.length);
     this.velocity = new Float32Array(this.rest.length);
@@ -42,13 +49,14 @@ export class TissueSystem {
     for (const id of this.edges) this.degree[id]++;
     for (let e = 0; e < this.edges.length; e += 2) {
       const a = this.edges[e], b = this.edges[e + 1];
-      const crossesPosterior = (data.regions[a] === 3 || data.regions[b] === 3 || this.regions[a] === 10 || this.regions[b] === 10) && this.rest[a * 3] * this.rest[b * 3] <= 0;
+      const crossesPosterior = (data.regions[a] === 3 || data.regions[b] === 3 || isSideRegion(this.regions[a]) || isSideRegion(this.regions[b])) && this.rest[a * 3] * this.rest[b * 3] <= 0;
       const lumbarBoundary = (this.regions[a] === 9 && this.regions[b] === 10) || (this.regions[b] === 9 && this.regions[a] === 10);
       // Regional bridges below own the pelvis-to-back connection, including its off switch.
-      this.edgeFactors[e / 2] = crossesPosterior || lumbarBoundary ? 0 : 1 / Math.sqrt(Math.max(1, this.degree[a] * this.degree[b]));
+      this.edgeFactors[e / 2] = crossesPosterior || lumbarBoundary || upperBoundary(this.regions[a], this.regions[b]) ? 0 : 1 / Math.sqrt(Math.max(1, this.degree[a] * this.degree[b]));
     }
     this.buildLumbarLinks(data.height);
-    this.parameters = { stiffness: 45, damping: 0.5, gravity: 0.3, tension: 0, strength: 1, radius: 0.10, region: -1, genitalCompliance: 1, genitalDamping: .5, genitalScale: 1, buttCompliance: 1, buttDamping: .5, buttMuscle: 1, buttFat: 1, buttSide: 0, buttMuscleLeft: 1, buttMuscleRight: 1, buttFatLeft: 1, buttFatRight: 1, lumbarCoupling: .65, lumbarSupport: .35, lumbarDamping: .65 };
+    this.upperLinks = buildUpperLinks(this, data.height);
+    this.parameters = { stiffness: 45, damping: 0.5, gravity: 0.3, tension: 0, strength: 1, radius: 0.10, region: -1, genitalCompliance: 1, genitalDamping: .5, genitalScale: 1, buttCompliance: 1, buttDamping: .5, buttMuscle: 1, buttFat: 1, buttSide: 0, buttMuscleLeft: 1, buttMuscleRight: 1, buttFatLeft: 1, buttFatRight: 1, lumbarCoupling: .65, lumbarSupport: .35, lumbarDamping: .65, upperCoupling: .65, upperSupport: .25, shoulderCoupling: .65, shoulderSupport: .35, handCoupling: .65, handSupport: .4 };
     this.paused = false;
     this._vibration = false;
     this.sleeping = false; this.quietTime = 0;
@@ -91,7 +99,7 @@ export class TissueSystem {
   selected(i) {
     const { region, buttSide } = this.parameters;
     if (region >= 0 && this.regions[i] !== region) return false;
-    if ((this.regions[i] !== 9 && this.regions[i] !== 10) || buttSide === 2) return true;
+    if (!isSideRegion(this.regions[i]) || buttSide === 2) return true;
     const side = buttSide || this.lastButtSide;
     return side !== 0 && Math.sign(this.rest[i * 3]) === side;
   }
@@ -105,13 +113,17 @@ export class TissueSystem {
       const muscle = p.buttMuscle * p['buttMuscle' + side], fat = p.buttFat * p['buttFat' + side];
       if (this.regions[i] === 9) this.support[i] *= (1 + this.buttAttachment[i] * 2.5) / p.buttCompliance * Math.sqrt(muscle) / Math.sqrt(fat);
       if (this.regions[i] === 10) this.support[i] *= 1 + p.lumbarSupport * 3;
+      if (this.regions[i] === 11) this.support[i] *= 1 + p.upperSupport * 3;
+      if (this.regions[i] === 12) this.support[i] *= 1 + p.shoulderSupport * 3;
+      if (this.regions[i] === 13) this.support[i] *= 1 + p.handSupport * 3;
       this.bulge[i] = .006 * tension * soft * (this.regions[i] === 9 ? 1 - this.buttAttachment[i] : 1);
       this.decay[i] = Math.exp(-(2 + (genital ? p.genitalDamping : this.regions[i] === 9 ? p.buttDamping : this.regions[i] === 10 ? p.lumbarDamping : p.damping) * 36) * DT);
       this.limits[i] = genital ? Math.min(.06, (this.sex === 'female' ? .010 : .035) * p.genitalScale) : (.006 + .055 * soft) * (this.regions[i] === 9 ? (1 - .65 * this.buttAttachment[i]) * Math.sqrt(fat) : 1);
+      if (this.regions[i] === 13) this.limits[i] = Math.min(.012, this.limits[i]);
     }
   }
   configure(values) {
-    const ranges = { stiffness: [1, 100], damping: [0, 1], gravity: [0, 2], tension: [0, 1], strength: [0.1, 3], radius: [0.03, 0.25], region: [-1, 10], genitalCompliance: [.5, 2], genitalDamping: [0, 1], genitalScale: [.55, 1.75], buttCompliance: [.5, 2], buttDamping: [0, 1], buttMuscle: [.75, 1.4], buttFat: [.5, 1.75], buttSide: [-1, 2], buttMuscleLeft: [.75, 1.4], buttMuscleRight: [.75, 1.4], buttFatLeft: [.5, 1.75], buttFatRight: [.5, 1.75], lumbarCoupling: [0, 1], lumbarSupport: [0, 1], lumbarDamping: [0, 1] };
+    const ranges = { stiffness: [1, 100], damping: [0, 1], gravity: [0, 2], tension: [0, 1], strength: [0.1, 3], radius: [0.03, 0.25], region: [-1, 13], genitalCompliance: [.5, 2], genitalDamping: [0, 1], genitalScale: [.55, 1.75], buttCompliance: [.5, 2], buttDamping: [0, 1], buttMuscle: [.75, 1.4], buttFat: [.5, 1.75], buttSide: [-1, 2], buttMuscleLeft: [.75, 1.4], buttMuscleRight: [.75, 1.4], buttFatLeft: [.5, 1.75], buttFatRight: [.5, 1.75], lumbarCoupling: [0, 1], lumbarSupport: [0, 1], lumbarDamping: [0, 1], upperCoupling: [0, 1], upperSupport: [0, 1], shoulderCoupling: [0, 1], shoulderSupport: [0, 1], handCoupling: [0, 1], handSupport: [0, 1] };
     let changed = false;
     for (const [key, value] of Object.entries(values)) {
       if (!ranges[key] || !Number.isFinite(value)) continue;
@@ -142,32 +154,35 @@ export class TissueSystem {
     this.grab = null; this.accumulator = 0; this.time = 0; this.maxDisplacement = 0;
   }
 
-  beginGrab(point, normal, tool = 'press') {
+  beginGrab(point, normal, tool = 'press', anchorId = -1) {
     this.wake();
     const { radius, region, strength } = this.parameters;
     const ids = [], weights = [];
-    // Infer the touched lobe from the nearest rear hip sample, before the brush
+    if (anchorId !== -1 && !eligibleGrabAnchor(this, anchorId)) { this.grab = null; return 0; }
+    // Infer the touched side from the nearest sample, before the brush
     // radius can include the other side. Dragging keeps the initial side.
-    let closest = Infinity, nearest = -1;
-    for (let i = 0; i < this.count; i++) {
+    let closest = Infinity, nearest = anchorId;
+    for (let i = 0; anchorId === -1 && i < this.count; i++) {
       const j = i * 3, distance = Math.hypot(this.rest[j] + this.offset[j] - point[0], this.rest[j + 1] + this.offset[j + 1] - point[1], this.rest[j + 2] + this.offset[j + 2] - point[2]);
       if (distance < closest) { closest = distance; nearest = i; }
     }
-    if (nearest >= 0 && [9, 10].includes(this.regions[nearest]) && Math.abs(point[0]) > 1e-6) {
-      this.lastButtSide = Math.sign(point[0]); this.refreshCoefficients();
+    const center = anchorId >= 0 ? Array.from(this.rest.slice(anchorId * 3, anchorId * 3 + 3), (v, k) => v + this.offset[anchorId * 3 + k]) : point;
+    if (nearest >= 0 && isSideRegion(this.regions[nearest]) && Math.abs(center[0]) > 1e-6) {
+      this.lastButtSide = Math.sign(center[0]); this.refreshCoefficients();
     }
-    const touchedPosterior = nearest >= 0 && [9, 10].includes(this.regions[nearest]);
+    const touchedPosterior = nearest >= 0 && isSideRegion(this.regions[nearest]);
     const brushSide = this.parameters.buttSide === 2 ? 0 : this.parameters.buttSide || this.lastButtSide;
     for (let i = 0; i < this.count; i++) {
       if (!this.selected(i)) continue;
       const j = 3 * i;
       if (touchedPosterior && brushSide && this.rest[j] * brushSide <= 0) continue;
-      const distance = Math.hypot(this.rest[j] + this.offset[j] - point[0], this.rest[j + 1] + this.offset[j + 1] - point[1], this.rest[j + 2] + this.offset[j + 2] - point[2]);
+      const distance = Math.hypot(this.rest[j] + this.offset[j] - center[0], this.rest[j + 1] + this.offset[j + 1] - center[1], this.rest[j + 2] + this.offset[j + 2] - center[2]);
       if (distance < radius) {
         ids.push(i); weights.push((1 - (distance / radius) ** 2) ** 2);
       }
     }
-    this.grab = { origin: [...point], target: [...point], normal: [...normal], direction: tool === 'pull' ? 1 : -1, strength, ids, weights };
+    const startOffset = Float32Array.from(ids.flatMap(i => Array.from(this.offset.slice(i * 3, i * 3 + 3))));
+    this.grab = { origin: [...point], target: [...point], normal: [...normal], direction: tool === 'pull' ? 1 : -1, strength, ids, weights, startOffset, anchorId: nearest };
     return ids.length;
   }
 
@@ -231,12 +246,22 @@ export class TissueSystem {
         f[ia] += force; f[ib] -= force;
       }
     }
+    for (const group of this.upperLinks) {
+      const baseK = (400 + stiffness * 20) * this.parameters[group.parameter];
+      for (let e = 0; e < group.ids.length; e += 2) {
+        const a = group.ids[e], b = group.ids[e + 1], k = baseK * group.factors[e / 2];
+        for (let axis = 0; axis < 3; axis++) {
+          const ia = a * 3 + axis, ib = b * 3 + axis, force = (d[ib] - d[ia]) * k;
+          f[ia] += force; f[ib] -= force;
+        }
+      }
+    }
     if (this.grab) {
       const g = this.grab;
       for (let t = 0; t < g.ids.length; t++) {
         const i = g.ids[t], soft = this.softness[i], j = i * 3;
         for (let axis = 0; axis < 3; axis++) {
-          const goal = clamp(g.target[axis] - g.origin[axis] + g.normal[axis] * g.direction * .025 * g.strength, -.08, .08);
+          const goal = g.startOffset[t * 3 + axis] + clamp(g.target[axis] - g.origin[axis] + g.normal[axis] * g.direction * .025 * g.strength, -.08, .08);
           f[j + axis] += (goal - d[j + axis]) * 1800 * g.weights[t] * soft;
         }
       }

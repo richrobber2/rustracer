@@ -41,12 +41,12 @@ for(const sex of ['female','male']) {
    assert.deepEqual(readCharacter(JSON.parse(JSON.stringify(preset))),preset);
   }
  });
- test(`${sex} actual GLB skin weights preserve seams and isolate opposite buttock and lower back`,async()=>{
+ test(`${sex} actual GLB skin weights preserve seams and isolate all connected regions`,async()=>{
   globalThis.self=globalThis;const loader=new GLTFLoader();loader.register(()=>({name:'HeadlessTextures',loadTexture:()=>Promise.resolve(new THREE.Texture())}));
   const bytes=fs.readFileSync(new URL(`../public/bodies/${sex}.glb`,import.meta.url));const gltf=await loader.parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');let g;gltf.scene.traverse(n=>{if(n.geometry?.attributes._cage_index)g=n.geometry;});
   const s=new TissueSystem(data);assert.ok(isolateButtockWeights(g,s)>0);const base=g.attributes.position.array.slice();
   const deformer=new SurfaceDeformer(g,s.count);
-  for(const region of [9,10]){
+  for(const region of [4,9,10,11,12,13]){
    s.offset.fill(0);for(let i=0;i<s.count;i++)if(s.regions[i]===region&&s.rest[i*3]>0)s.offset[i*3+2]=-.02;
    deformer.update(s.offset,{force:true,normals:true});const out=g.attributes.position.array;let active=0;
    for(let i=0;i<g.attributes.position.count;i++){

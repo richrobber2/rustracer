@@ -1,4 +1,5 @@
-// Keep posterior hip and lumbar skin from blending opposite-side displacement.
+import { isSideRegion } from './upper-body.js';
+// Keep connected back, shoulder, arm and hand skin on its own side.
 // The fixed skeleton remains shared. UV duplicates receive identical weights.
 export function isolateButtockWeights(geometry, system) {
   const { position, _cage_index: ids, _cage_weight: weights } = geometry.attributes;
@@ -9,7 +10,7 @@ export function isolateButtockWeights(geometry, system) {
     let posteriorRegion = -1;
     for (let k = 0; k < 4; k++) {
       const region = system.regions[ids.array[at + k]];
-      if (region === 9 || region === 10) posteriorRegion = region;
+      if (isSideRegion(region)) posteriorRegion = region;
     }
     if (posteriorRegion < 0) continue;
     let sum = 0;

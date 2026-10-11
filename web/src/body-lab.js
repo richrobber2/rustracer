@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { TissueSystem } from './tissue-physics.js';
 import { isolateButtockWeights } from './buttock-sides.js';
-import { ButtockMap } from './buttock-map.js';
+import { ButtockMap, MAP_REGIONS } from './buttock-map.js';
+import { isSideRegion } from './upper-body.js';
+import { surfaceGrabAnchor } from './grab-points.js';
 import { SurfaceDeformer } from './surface-deformer.js';
 import { BodyMorph, PROPORTIONS, DEFAULT_PROPORTIONS, sanitizeProportions, readCharacter } from './body-proportions.js';
 
@@ -31,8 +33,10 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   const raycaster = new THREE.Raycaster(), screen = new THREE.Vector2();
   const plane = new THREE.Plane(), worldPoint = new THREE.Vector3(), localPoint = new THREE.Vector3(), normal = new THREE.Vector3();
   const canvas = renderer.domElement;
-  const buttockMap = new ButtockMap($('buttock-map'), $('buttock-map-status'));
-  const settings = ['stiffness', 'damping', 'gravity', 'tension', 'radius', 'strength', 'genitalCompliance', 'genitalDamping', 'buttCompliance', 'buttDamping', 'lumbarCoupling', 'lumbarSupport', 'lumbarDamping'];
+  const mapCanvas = $('buttock-map');
+  let grabCanvas = canvas, mapDrag = null;
+  const buttockMap = new ButtockMap(mapCanvas, $('buttock-map-status'), $('tissue-mapRegion').value);
+  const settings = ['stiffness', 'damping', 'gravity', 'tension', 'radius', 'strength', 'genitalCompliance', 'genitalDamping', 'buttCompliance', 'buttDamping', 'lumbarCoupling', 'lumbarSupport', 'lumbarDamping', 'upperCoupling', 'upperSupport', 'shoulderCoupling', 'shoulderSupport', 'handCoupling', 'handSupport'];
   const parameterValues = () => ({ ...Object.fromEntries(settings.map(id => [id, Number($(`tissue-${id}`).value)])), buttSide: Number($('tissue-buttSide').value) });
   function setButtons() {
     $('tissue-pause').textContent = current?.system.paused ? 'Resume physics' : 'Pause physics';
@@ -52,9 +56,10 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   function endPointer(event) {
     if (pointer === null) return;
     if (event && event.pointerId !== pointer) return;
-    const id = pointer; pointer = null;
+    const id = pointer; pointer = null; mapDrag = null;
     current?.system.endGrab(); controls.enabled = true;
-    if (canvas.hasPointerCapture(id)) canvas.releasePointerCapture(id);
+    if (grabCanvas.hasPointerCapture(id)) grabCanvas.releasePointerCapture(id);
+    grabCanvas = canvas;
   }
   function detach() {
     serial++; endPointer();
@@ -125,6 +130,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
     $('creator-status').textContent = `${current.sex === 'female' ? 'Female' : 'Male'} · ${(current.data.height * shape.height).toFixed(2)} m · proportions applied`;
   }
   function setPanel(name) {
+    endPointer();
     for (const section of document.querySelectorAll('[data-panel]')) section.hidden = section.dataset.panel !== name;
     for (const button of document.querySelectorAll('[data-panel-tab]')) {
       const selected = button.dataset.panelTab === name;
@@ -173,6 +179,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   }
   $('focus-pelvis').onclick = () => focusRegion(8);
   $('focus-buttocks').onclick = () => focusRegion(9, true);
+  $('focus-upper').onclick = () => focusRegion(11, true);
   const snapshot = () => ({ version: 1, sex: current.sex, proportions: { ...shape }, tissue: { ...current.system.parameters, ...parameterValues() } });
   const restoreCharacter = value => { const character = readCharacter(value); load(character.sex, character); };
   for (const button of document.querySelectorAll('[data-save-character]')) button.onclick = () => {
@@ -252,6 +259,8 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
         const option = document.createElement('option'); option.value = String(index - 1); option.textContent = label; return option;
       }));
       $('tissue-region').value = String(system.parameters.region);
+      if (system.parameters.region === 9) setMapMode('pelvis');
+      else if (system.parameters.region === 4 || system.parameters.region >= 11) setMapMode('upper');
       for (const button of document.querySelectorAll('[data-body]')) button.setAttribute('aria-pressed', String(button.dataset.body === sex));
       $('body-download').href = modelUrl; $('body-download').download = `${sex}-body.glb`;
       $('body-download').textContent = `Download base ${sex} GLB`;
@@ -272,7 +281,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   for (const button of document.querySelectorAll('[data-body]')) button.onclick = () => load(button.dataset.body);
   for (const button of document.querySelectorAll('[data-tissue-tool]')) button.onclick = () => setTool(button.dataset.tissueTool);
   function formatParameter(id, value) {
-    return id === 'radius' ? `${Math.round(value * 100)} cm` : id === 'stiffness' ? String(value) : ['damping', 'tension', 'genitalDamping', 'buttDamping', 'lumbarCoupling', 'lumbarSupport', 'lumbarDamping'].includes(id) ? `${Math.round(value * 100)}%` : `${value.toFixed(1)}×`;
+    return id === 'radius' ? `${Math.round(value * 100)} cm` : id === 'stiffness' ? String(value) : ['damping', 'tension', 'genitalDamping', 'buttDamping', 'lumbarCoupling', 'lumbarSupport', 'lumbarDamping', 'upperCoupling', 'upperSupport', 'shoulderCoupling', 'shoulderSupport', 'handCoupling', 'handSupport'].includes(id) ? `${Math.round(value * 100)}%` : `${value.toFixed(1)}×`;
   }
   for (const id of settings) {
     $(`tissue-${id}`).oninput = () => {
@@ -287,16 +296,34 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
     for (const [id, value] of Object.entries(preset)) { $(`tissue-${id}`).value = value; $(`tissue-${id}`).oninput(); }
     $('tissue-preset').value = name;
   };
-  $('tissue-buttSide').onchange = () => { endPointer(); current?.system.configure({ buttSide: Number($('tissue-buttSide').value) }); resume(); };
-  $('tissue-region').onchange = () => current?.system.configure({ region: Number($('tissue-region').value) });
+  function setMapMode(mode) { $('tissue-mapRegion').value = mode; buttockMap.setMode(mode); }
+  function showAnchor(id) {
+    const region = current.system.regions[id];
+    if (region === 9) setMapMode('pelvis');
+    else if (region === 4 || region >= 11) setMapMode('upper');
+    buttockMap.select(id);
+  }
+  $('tissue-mapRegion').onchange = () => {
+    endPointer(); setMapMode($('tissue-mapRegion').value);
+    if (current && current.system.parameters.region >= 0 && !MAP_REGIONS[buttockMap.mode].includes(current.system.parameters.region)) {
+      current.system.configure({ region: -1 }); $('tissue-region').value = '-1';
+    }
+    buttockMap.next = 0; buttockMap.update(Infinity); buttockMap.next = 0;
+  };
+  $('tissue-buttSide').onchange = () => { endPointer(); current?.system.configure({ buttSide: Number($('tissue-buttSide').value) }); buttockMap.next = 0; resume(); };
+  $('tissue-region').onchange = () => {
+    endPointer(); const region = Number($('tissue-region').value); current?.system.configure({ region });
+    if (region === 9) setMapMode('pelvis'); else if (region === 4 || region >= 11) setMapMode('upper');
+    buttockMap.next = 0; resume();
+  };
   $('tissue-pause').onclick = () => current?.system.paused ? resume() : pause();
   $('tissue-reset').onclick = () => { if (current) { endPointer(); current.system.reset(); current.system.vibration = false; setButtons(); updateSurface(true); requestRealtime(); } };
   $('tissue-impulse').onclick = () => {
-    if ([9, 10].includes(current?.system.parameters.region) && !current.system.parameters.buttSide && !current.system.lastButtSide) { notify('Touch a buttock or the lower back first, or choose a side for the pulse.'); return; }
+    if (current && isSideRegion(current.system.parameters.region) && !current.system.parameters.buttSide && !current.system.lastButtSide) { notify('Touch a side first, or choose a side for the pulse.'); return; }
     resume(); current?.system.impulse();
   };
   $('tissue-vibrate').onclick = () => { if (current) {
-    if (!current.system.vibration && [9, 10].includes(current.system.parameters.region) && !current.system.parameters.buttSide && !current.system.lastButtSide) { notify('Touch a buttock or the lower back first, or choose a side for vibration.'); return; }
+    if (!current.system.vibration && isSideRegion(current.system.parameters.region) && !current.system.parameters.buttSide && !current.system.lastButtSide) { notify('Touch a side first, or choose a side for vibration.'); return; }
     resume(); current.system.vibration = !current.system.vibration; setButtons(); } };
   $('tissue-view').onchange = () => { requestRealtime(); applyView(); };
   function updateRay(event) {
@@ -306,29 +333,60 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   }
   canvas.addEventListener('pointerdown', event => {
     if (!current || tool === 'orbit' || event.button !== 0 || pointer !== null) return;
+    if (pendingShape) applyShape(); updateSurface();
     updateRay(event); current.mesh.updateWorldMatrix(true, false);
     const hit = raycaster.intersectObject(current.mesh, false)[0];
     if (!hit) return;
     const point = current.mesh.worldToLocal(hit.point.clone());
     const n = hit.face.normal.clone().normalize();
-    const affected = current.system.beginGrab(point.toArray(), n.toArray(), tool);
+    const triangle = new THREE.Triangle(...[hit.face.a, hit.face.b, hit.face.c].map(id => current.mesh.getVertexPosition(id, new THREE.Vector3())));
+    const barycentric = triangle.getBarycoord(point, new THREE.Vector3());
+    const anchor = barycentric ? surfaceGrabAnchor(current.system, current.mesh.geometry, hit.face, barycentric.toArray(), point.toArray()) : -1;
+    if (anchor < 0) { notify('Touch the selected region and side, or choose Whole body.'); return; }
+    const affected = current.system.beginGrab(point.toArray(), n.toArray(), tool, anchor);
     if (!affected) { notify('Choose Whole body, or touch the selected region.'); current.system.endGrab(); return; }
     event.preventDefault(); event.stopImmediatePropagation(); resume();
-    pointer = event.pointerId; controls.enabled = false;
+    pointer = event.pointerId; grabCanvas = canvas; controls.enabled = false; showAnchor(anchor);
     canvas.setPointerCapture(pointer);
     camera.getWorldDirection(normal); plane.setFromNormalAndCoplanarPoint(normal, hit.point);
   }, true);
   canvas.addEventListener('pointermove', event => {
-    if (pointer !== event.pointerId || !current) return;
+    if (pointer !== event.pointerId || grabCanvas !== canvas || !current) return;
     event.preventDefault(); event.stopImmediatePropagation(); updateRay(event);
     if (raycaster.ray.intersectPlane(plane, worldPoint)) {
       localPoint.copy(worldPoint); current.mesh.worldToLocal(localPoint); current.system.moveGrab(localPoint.toArray());
     }
   }, true);
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(type, event => {
-    if (pointer !== event.pointerId) return;
+    if (pointer !== event.pointerId || grabCanvas !== canvas) return;
     if (event.cancelable) event.preventDefault();
     event.stopImmediatePropagation(); endPointer(event);
+  }, true);
+  const mapPixel = event => {
+    const r = mapCanvas.getBoundingClientRect();
+    return { x: (event.clientX - r.left) * mapCanvas.width / r.width, y: (event.clientY - r.top) * mapCanvas.height / r.height };
+  };
+  mapCanvas.addEventListener('pointerdown', event => {
+    if (!current || event.button !== 0 || pointer !== null) return;
+    if (pendingShape) applyShape();
+    const pixel = mapPixel(event), sample = buttockMap.pick(pixel.x, pixel.y);
+    if (!sample) return;
+    if (tool === 'orbit') setTool('press');
+    const point = [sample.x, sample.y, sample.z], normal = Array.from(current.system.normals.slice(sample.id * 3, sample.id * 3 + 3));
+    if (!current.system.beginGrab(point, normal, tool, sample.id)) return;
+    event.preventDefault(); event.stopImmediatePropagation(); resume();
+    pointer = event.pointerId; grabCanvas = mapCanvas; controls.enabled = false;
+    mapDrag = { pixel, point }; buttockMap.select(sample.id); mapCanvas.setPointerCapture(pointer);
+  }, true);
+  mapCanvas.addEventListener('pointermove', event => {
+    if (pointer !== event.pointerId || grabCanvas !== mapCanvas || !mapDrag || !current) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    const pixel = mapPixel(event), delta = buttockMap.worldDelta(pixel.x - mapDrag.pixel.x, pixel.y - mapDrag.pixel.y);
+    current.system.moveGrab(mapDrag.point.map((v, k) => v + delta[k]));
+  }, true);
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) mapCanvas.addEventListener(type, event => {
+    if (pointer !== event.pointerId || grabCanvas !== mapCanvas) return;
+    if (event.cancelable) event.preventDefault(); event.stopImmediatePropagation(); endPointer(event);
   }, true);
   window.addEventListener('blur', () => endPointer());
   document.addEventListener('visibilitychange', () => { if (document.hidden) endPointer(); });
