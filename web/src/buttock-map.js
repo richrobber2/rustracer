@@ -19,7 +19,9 @@ export function mapSamples(system, regions) {
   for (let i = 0; i < system.count; i++) {
     if (!regions.includes(system.regions[i])) continue;
     const j = i * 3;
-    points.push({ id: i, region: system.regions[i], x: system.rest[j] + system.offset[j], y: system.rest[j + 1] + system.offset[j + 1], z: system.rest[j + 2] + system.offset[j + 2], restX: system.rest[j], restY: system.rest[j + 1],
+    const rest = Array.from(system.rest.slice(j, j + 3)), material = rest.map((v, k) => v + system.offset[j + k]);
+    const current = system.pose ? system.pose.point(i, material) : material, posedRest = system.pose ? system.pose.point(i, rest) : rest;
+    points.push({ id: i, region: system.regions[i], x: current[0], y: current[1], z: current[2], restX: posedRest[0], restY: posedRest[1],
       mm: Math.hypot(system.offset[j], system.offset[j + 1], system.offset[j + 2]) * 1000 });
   }
   return points;
@@ -32,6 +34,7 @@ export class ButtockMap {
   }
   clear() {
     this.system = null;
+    this.drawnPoints = null;
     this.selectedId = -1;
     const c = this.context; if (c) { c.fillStyle = '#101820'; c.fillRect(0, 0, this.canvas.width, this.canvas.height); }
     this.status.textContent = 'Choose a body to see tissue samples.';
@@ -40,13 +43,17 @@ export class ButtockMap {
     this.system = system; this.next = 0;
     const points = mapSamples(system, MAP_REGIONS[this.mode]);
     if (!points.length) { this.clear(); return; }
+    this.fit(points);
+    this.update(Infinity); this.next = 0;
+  }
+  fit(points) {
+    const system = this.system;
     const xs = points.map(p => p.restX), ys = points.map(p => p.restY);
     this.minX = Math.min(...xs); this.maxX = Math.max(...xs);
     this.minY = Math.min(...ys); this.maxY = Math.max(...ys);
     const margin = Math.max(...points.map(p => system.limits[p.id])) + .01;
     this.scale = Math.min((this.canvas.width - 32) / (this.maxX - this.minX + margin * 2), (this.canvas.height - 46) / (this.maxY - this.minY + margin * 2));
     this.centerX = (this.minX + this.maxX) / 2; this.centerY = (this.minY + this.maxY) / 2;
-    this.update(Infinity); this.next = 0;
   }
   setMode(mode) {
     if (!MAP_REGIONS[mode]) return;
@@ -58,18 +65,23 @@ export class ButtockMap {
   pick(x, y, radius = 11) {
     if (!this.system || !Number.isFinite(x) || !Number.isFinite(y)) return null;
     let nearest = null, best = radius * radius;
-    for (const point of mapSamples(this.system, MAP_REGIONS[this.mode])) {
+    // During animation, hit the dots the user actually sees at 10 Hz, then
+    // resolve that anchor to its latest posed position before holding the rig.
+    const points = this.system.pose && this.drawnPoints ? this.drawnPoints : mapSamples(this.system, MAP_REGIONS[this.mode]);
+    for (const point of points) {
       if (!eligibleGrabAnchor(this.system, point.id)) continue;
       const pixel = this.project(point), distance = (pixel.x - x) ** 2 + (pixel.y - y) ** 2;
       if (distance < best || (nearest && Math.abs(distance - best) < 1e-8 && (this.mode === 'abs' ? point.z > nearest.z : point.z < nearest.z))) { nearest = point; best = distance; }
     }
-    return nearest;
+    return nearest && this.system.pose ? mapSamples(this.system, MAP_REGIONS[this.mode]).find(p => p.id === nearest.id) : nearest;
   }
   select(id) { this.selectedId = id; this.next = 0; this.update(Infinity); this.next = 0; }
   update(now) {
     if (!this.system || !this.context || now < this.next) return;
     this.next = now + 100;
     const c = this.context, w = this.canvas.width, h = this.canvas.height, points = mapSamples(this.system, MAP_REGIONS[this.mode]).sort((a, b) => this.mode === 'abs' ? a.z - b.z : b.z - a.z);
+    if (this.system.pose) this.fit(points);
+    this.drawnPoints = points;
     c.fillStyle = '#101820'; c.fillRect(0, 0, w, h);
     c.strokeStyle = '#2b3c48'; c.lineWidth = 1;
     c.beginPath(); c.moveTo(w / 2, 16); c.lineTo(w / 2, h - 24); c.stroke();

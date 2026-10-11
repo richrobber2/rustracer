@@ -60,5 +60,7 @@ export class BodyMorph {
 }
 export function readCharacter(value) {
   if (!value || value.version !== 1 || !['male', 'female'].includes(value.sex)) throw new Error('Unsupported character preset');
-  return { version: 1, sex: value.sex, proportions: sanitizeProportions(value.proportions), tissue: value.tissue && typeof value.tissue === 'object' ? value.tissue : {} };
+  const result = { version: 1, sex: value.sex, proportions: sanitizeProportions(value.proportions), tissue: value.tissue && typeof value.tissue === 'object' ? value.tissue : {} };
+  if (value.motion && typeof value.motion === 'object') result.motion = value.motion;
+  return result;
 }

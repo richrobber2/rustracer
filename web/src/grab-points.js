@@ -25,7 +25,9 @@ export function surfaceGrabAnchor(system, geometry, face, barycentric, point) {
   for (const [id, weight] of candidates) {
     if (!eligibleGrabAnchor(system, id)) continue;
     const j = id * 3;
-    const distance = (system.rest[j] + system.offset[j] - point[0]) ** 2 + (system.rest[j + 1] + system.offset[j + 1] - point[1]) ** 2 + (system.rest[j + 2] + system.offset[j + 2] - point[2]) ** 2;
+    const material = [system.rest[j] + system.offset[j], system.rest[j + 1] + system.offset[j + 1], system.rest[j + 2] + system.offset[j + 2]];
+    const current = system.pose ? system.pose.point(id, material) : material;
+    const distance = (current[0] - point[0]) ** 2 + (current[1] - point[1]) ** 2 + (current[2] - point[2]) ** 2;
     const candidateScore = distance / (.25 + weight);
     if (candidateScore < score) { nearest = id; score = candidateScore; }
   }

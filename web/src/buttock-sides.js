@@ -1,6 +1,6 @@
 import { isSideRegion } from './upper-body.js';
 // Keep connected abdominal, pelvic, back, shoulder, arm and hand skin on its own side.
-// The fixed skeleton remains shared. UV duplicates receive identical weights.
+// The skeletal rig remains shared. UV duplicates receive identical weights.
 export function isolateButtockWeights(geometry, system) {
   const { position, _cage_index: ids, _cage_weight: weights } = geometry.attributes;
   let changed = 0;

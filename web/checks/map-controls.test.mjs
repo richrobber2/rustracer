@@ -10,7 +10,8 @@ import { ButtockMap, mapSamples, MAP_REGIONS } from '../src/buttock-map.js';
 test('actual map controls capture a displaced sample, cancel, and release on panel change', async t => {
   const original = Object.fromEntries(['document', 'window', 'self', 'fetch', 'createImageBitmap'].map(key => [key, globalThis[key]]));
   t.after(() => { for (const [key, value] of Object.entries(original)) globalThis[key] = value; });
-  const elements = new Map(), context = { fillRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, fillText() {}, arc() {}, fill() {} };
+  const dots = [];
+  const elements = new Map(), context = { fillRect() { dots.length = 0; }, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, fillText() {}, arc(x, y, radius) { if (radius === 3.5) dots.push({ x, y }); }, fill() {} };
   class Element {
     constructor() { this.style = {}; this.listeners = new Map(); this.captures = new Set(); this.classList = { toggle() {} }; }
     set id(value) { this._id = value; elements.set(value, this); }
@@ -46,7 +47,8 @@ test('actual map controls capture a displaced sample, cancel, and release on pan
     return original.fetch(url, options); // Embedded texture blob URL only.
   };
   const controls = { enabled: true, target: new THREE.Vector3(), update() {} }, renderer = { domElement: new Element() }, notifications = [];
-  const lab = createBodyLab({ renderer, camera: new THREE.PerspectiveCamera(), controls, onReady() {}, requestRealtime() {}, notify(message) { notifications.push(message); } });
+  let bodyObject;
+  const lab = createBodyLab({ renderer, camera: new THREE.PerspectiveCamera(), controls, onReady(object) { bodyObject = object; }, requestRealtime() {}, notify(message) { notifications.push(message); } });
   await lab.load('female'); assert.ok(lab.active, notifications.join('; '));
   const data = JSON.parse(fs.readFileSync(new URL('../public/bodies/female-cage.json', import.meta.url))), system = new TissueSystem(data);
   for (let f = 0; f < 20; f++) { lab.update(1 / 60, f * 1000 / 60); system.step(1 / 60); }
@@ -77,4 +79,26 @@ test('actual map controls capture a displaced sample, cancel, and release on pan
   for (const key of ['absSupport', 'obliqueSupport', 'absCoupling', 'coreCoupling', 'coreBracing', 'absDamping']) {
     elements.get(`tissue-${key}`).value = '.8'; elements.get(`tissue-${key}`).oninput(); assert.equal(elements.get(`tissue-${key}-value`).value, '80%');
   }
+  // Exercise muscle controls and a live posed-map grab against the actual rig.
+  const shoulder = bodyObject.getObjectByName('upperarm01L'), other = bodyObject.getObjectByName('upperarm01R');
+  const rest = shoulder.quaternion.clone(), opposite = other.quaternion.clone();
+  elements.get('motion-play').onclick();
+  for (let f = 0; f < 90; f++) lab.update(1 / 60, 1000 + f * 1000 / 60);
+  assert.ok(shoulder.quaternion.angleTo(rest) > .1); assert.ok(other.quaternion.angleTo(opposite) < 1e-6); assert.match(elements.get('motion-status').textContent, /Muscle loop/);
+  const live = dots.reduce((a, b) => a.x < b.x ? a : b), held = shoulder.quaternion.clone();
+  mapCanvas.emit('pointerdown', { ...event, pointerId: 10, clientX: live.x, clientY: live.y }); assert.equal(controls.enabled, false);
+  for (let f = 0; f < 30; f++) lab.update(1 / 60, 3000 + f * 1000 / 60);
+  assert.deepEqual(shoulder.quaternion.toArray(), held.toArray()); assert.match(elements.get('motion-status').textContent, /held during grab/);
+  mapCanvas.emit('pointermove', { ...event, pointerId: 10, clientX: live.x + 12 });
+  mapCanvas.emit('pointerup', { ...event, pointerId: 10 }); assert.equal(controls.enabled, true);
+  lab.pause(); const paused = shoulder.quaternion.clone(); lab.update(1 / 60, 4000); assert.deepEqual(shoulder.quaternion.toArray(), paused.toArray());
+  elements.get('motion-reset').onclick(); assert.ok(shoulder.quaternion.angleTo(rest) < 1e-6);
+  elements.get('motion-group').value = 'elbow'; elements.get('motion-side').value = '-1'; elements.get('motion-side').onchange();
+  elements.get('motion-agonist').value = '.8'; elements.get('motion-agonist').oninput();
+  for (let f = 0; f < 60; f++) lab.update(1 / 60, 5000 + f * 1000 / 60);
+  assert.ok(bodyObject.getObjectByName('lowerarm01R').quaternion.angleTo(new THREE.Quaternion()) > .2);
+  assert.ok(bodyObject.getObjectByName('lowerarm01L').quaternion.angleTo(new THREE.Quaternion()) < 1e-6);
+  elements.get('motion-hold').onclick(); const elbow = bodyObject.getObjectByName('lowerarm01R').quaternion.clone();
+  lab.update(1 / 60, 6200); assert.deepEqual(bodyObject.getObjectByName('lowerarm01R').quaternion.toArray(), elbow.toArray());
+  assert.equal(elements.get('motion-hold').textContent, 'Run muscles');
 });

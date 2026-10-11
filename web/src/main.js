@@ -499,6 +499,7 @@ async function init() {
   tissueLab = createBodyLab({
     renderer, camera, controls, notify,
     requestRealtime: () => { if (mode !== 'realtime' || modeLoading) setRealtime(); },
+    onMotionView: () => frame('front'),
     onReady: (object, name) => { ++importSerial; replaceModel(object, name, [], true); frame('front'); },
   });
   tissueLab.load('female');

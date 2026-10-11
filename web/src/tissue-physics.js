@@ -1,5 +1,5 @@
 // An illustrative anchored surface spring network, not calibrated biomechanics.
-// Displacements are in meters. A fixed skeleton supports the rest surface.
+// Material-frame displacements are in meters; the rig carries the rest surface.
 import { upperRegion, isSideRegion, upperBoundary, buildUpperLinks } from './upper-body.js';
 import { eligibleGrabAnchor } from './grab-points.js';
 import { abdominalRegion, abdominalBoundary, buildAbdominalLinks, regionMatches } from './abdomen.js';
@@ -234,9 +234,11 @@ export class TissueSystem {
     for (let i = 0; i < this.count; i++) {
       const j = i * 3, soft = this.softness[i];
       const selected = this.selected(i);
-      const k = this.support[i], bulge = this.bulge[i];
+      const activation = this.activation?.[i] || 0;
+      const k = this.support[i] * (1 + activation * 1.5), bulge = this.bulge[i] + .003 * activation * soft;
       for (let axis = 0; axis < 3; axis++) f[j + axis] = -k * (d[j + axis] - this.normals[j + axis] * bulge);
-      f[j + 1] -= 9.81 * gravity * soft;
+      if (this.pose) for (let axis = 0; axis < 3; axis++) f[j + axis] += 9.81 * gravity * soft * this.pose.gravity[j + axis];
+      else f[j + 1] -= 9.81 * gravity * soft;
       if (this.vibration && selected) f[j] += oscillation * soft;
     }
     // Neighbor coupling transmits a local deformation through the tissue surface.

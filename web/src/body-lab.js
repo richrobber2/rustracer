@@ -5,6 +5,7 @@ import { isolateButtockWeights } from './buttock-sides.js';
 import { ButtockMap, MAP_REGIONS, mapModeForRegion } from './buttock-map.js';
 import { isSideRegion } from './upper-body.js';
 import { surfaceGrabAnchor } from './grab-points.js';
+import { MuscleMotion, CagePose, MUSCLE_GROUPS } from './muscle-motion.js';
 import { SurfaceDeformer } from './surface-deformer.js';
 import { BodyMorph, PROPORTIONS, DEFAULT_PROPORTIONS, sanitizeProportions, readCharacter } from './body-proportions.js';
 
@@ -27,7 +28,7 @@ function disposeObject(object) {
   });
 }
 
-export function createBodyLab({ renderer, camera, controls, onReady, requestRealtime, notify }) {
+export function createBodyLab({ renderer, camera, controls, onReady, onMotionView = () => {}, requestRealtime, notify }) {
   let pendingSide = 0;
   let serial = 0, current = null, pointer = null, tool = 'orbit', pendingShape = false, shape = { ...DEFAULT_PROPORTIONS }, loadController = null, nextNormals = 0, averageCpu = 0;
   const raycaster = new THREE.Raycaster(), screen = new THREE.Vector2();
@@ -42,6 +43,8 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   function setButtons() {
     $('tissue-pause').textContent = current?.system.paused ? 'Resume physics' : 'Pause physics';
     $('tissue-vibrate').setAttribute('aria-pressed', String(Boolean(current?.system.vibration)));
+    $('motion-hold').textContent = current?.motion.held ? 'Run muscles' : 'Hold pose';
+    $('motion-play').textContent = current?.motion.running ? 'Restart muscle loop' : 'Play muscle loop';
   }
   function resume() {
     if (!current) return;
@@ -121,6 +124,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
       mesh.geometry.computeVertexNormals();
       mesh.boundingBox = null; mesh.boundingSphere = null;
     }
+    current.motion.setShape(shape); current.pose.refresh(current.motion.version);
     updateSurface(true, true);
     buttockMap.setSystem(current.system);
     current.mesh.geometry.computeBoundingBox(); current.mesh.geometry.computeBoundingSphere();
@@ -173,7 +177,9 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
     if (!current) return;
     if (pendingShape) applyShape();
     const p = new THREE.Vector3(), a = current.system.rest; let count = 0;
-    for (let i = 0; i < current.system.count; i++) if (current.system.regions[i] === region) { p.x += a[i * 3]; p.y += a[i * 3 + 1]; p.z += a[i * 3 + 2]; count++; }
+    for (let i = 0; i < current.system.count; i++) if (current.system.regions[i] === region) {
+      const point = current.pose.point(i, Array.from(a.slice(i * 3, i * 3 + 3))); p.x += point[0]; p.y += point[1]; p.z += point[2]; count++;
+    }
     p.multiplyScalar(1 / Math.max(1, count)); current.mesh.localToWorld(p);
     const direction = new THREE.Vector3(0, .08, rear ? -.55 : .55).transformDirection(current.mesh.matrixWorld).multiplyScalar(.55 * shape.height * current.object.scale.x);
     controls.target.copy(p); camera.position.copy(p).add(direction); camera.lookAt(p); controls.update();
@@ -187,7 +193,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
     current.system.configure({ region: 2 }); $('tissue-region').value = '2';
     buttockMap.next = 0; setPanel('physics');
   };
-  const snapshot = () => ({ version: 1, sex: current.sex, proportions: { ...shape }, tissue: { ...current.system.parameters, ...parameterValues() } });
+  const snapshot = () => ({ version: 1, sex: current.sex, proportions: { ...shape }, tissue: { ...current.system.parameters, ...parameterValues() }, motion: current.motion.snapshot() });
   const restoreCharacter = value => { const character = readCharacter(value); load(character.sex, character); };
   for (const button of document.querySelectorAll('[data-save-character]')) button.onclick = () => {
     if (!current) return;
@@ -244,6 +250,9 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
       shape = sanitizeProportions(character?.proportions); displayShape();
       const geometry = mesh.geometry;
       isolateButtockWeights(geometry, system);
+      const motion = new MuscleMotion(gltf.scene, mesh, data);
+      motion.restore(character?.motion);
+      const pose = new CagePose(mesh, system, data); system.pose = pose;
       const color = new THREE.Float32BufferAttribute(new Float32Array(geometry.attributes.position.count * 3), 3);
       geometry.setAttribute('color', color);
       geometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
@@ -254,11 +263,14 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
       if (current) current.mesh.material.map = current.skinMap;
       const accessories = [];
       gltf.scene.traverse(node => { if (node.isMesh && node !== mesh) accessories.push({ mesh: node, morph: new BodyMorph(node.geometry.attributes.position.array, null, data) }); });
-      current = { object: gltf.scene, mesh, system, data, sex, skinMap: mesh.material.map,
+      current = { object: gltf.scene, mesh, system, data, sex, motion, pose, skinMap: mesh.material.map,
         deformer: new SurfaceDeformer(geometry, system.count),
         morph: new BodyMorph(geometry.attributes.position.array, geometry.attributes._genital_weight.array, data),
         cageMorph: new BodyMorph(data.positions, data.genitalWeights, data), accessories };
       applyShape();
+      $('motion-side').value = String(motion.side); $('motion-demo').value = motion.demo;
+      $('motion-strength').value = motion.strength; $('motion-speed').value = motion.speed;
+      displayMotionControls();
 
       onReady(gltf.scene, `${sex === 'female' ? 'Female' : 'Male'} · soft-tissue study`);
       $('tissue-fields').disabled = false; $('creator-fields').disabled = false;
@@ -331,6 +343,43 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
     if (!current.system.vibration && isSideRegion(current.system.parameters.region) && !current.system.parameters.buttSide && !current.system.lastButtSide) { notify('Touch a side first, or choose a side for vibration.'); return; }
     resume(); current.system.vibration = !current.system.vibration; setButtons(); } };
   $('tissue-view').onchange = () => { requestRealtime(); applyView(); };
+  function displayMotionControls() {
+    const group = MUSCLE_GROUPS.find(g => g.id === $('motion-group').value) || MUSCLE_GROUPS[1];
+    $('motion-agonist-name').textContent = group.agonist; $('motion-antagonist-name').textContent = group.antagonist;
+    const joints = current?.motion.selected(group.id, Number($('motion-side').value)) || [];
+    for (const [key, k] of [['agonist', 0], ['antagonist', 1]]) {
+      const value = joints.length ? joints.reduce((sum, j) => sum + j.excitation[k], 0) / joints.length : 0;
+      $(`motion-${key}`).value = value; $(`motion-${key}-value`).value = `${Math.round(value * 100)}%`;
+    }
+    for (const key of ['strength', 'speed']) $(`motion-${key}-value`).value = `${Number($(`motion-${key}`).value).toFixed(2)}×`;
+    setButtons();
+  }
+  $('motion-group').onchange = displayMotionControls;
+  $('motion-side').onchange = () => { current?.motion.configure({ side: Number($('motion-side').value) }); displayMotionControls(); };
+  for (const key of ['agonist', 'antagonist']) $(`motion-${key}`).oninput = () => {
+    if (!current) return;
+    endPointer(); current.motion.setExcitation($('motion-group').value, Number($('motion-side').value), [Number($('motion-agonist').value), Number($('motion-antagonist').value)]);
+    displayMotionControls(); resume();
+  };
+  for (const key of ['strength', 'speed']) $(`motion-${key}`).oninput = () => {
+    current?.motion.configure({ [key]: Number($(`motion-${key}`).value) }); displayMotionControls(); resume();
+  };
+  $('motion-demo').onchange = () => { current?.motion.configure({ demo: $('motion-demo').value }); };
+  $('motion-play').onclick = () => {
+    if (!current) return;
+    endPointer(); current.motion.configure({ demo: $('motion-demo').value, side: Number($('motion-side').value) }); current.motion.play();
+    $('motion-group').value = current.motion.demo === 'core' ? 'core' : current.motion.demo === 'hands' ? 'grip' : 'shoulder';
+    setMapMode(current.motion.demo === 'core' ? 'abs' : 'upper'); current.system.configure({ region: -1 }); $('tissue-region').value = '-1';
+    onMotionView();
+    resume(); displayMotionControls();
+  };
+  $('motion-hold').onclick = () => { if (current) { endPointer(); current.motion.held = !current.motion.held; resume(); setButtons(); } };
+  $('motion-relax').onclick = () => { if (current) { endPointer(); current.motion.relax(); resume(); displayMotionControls(); } };
+  $('motion-reset').onclick = () => {
+    if (!current) return;
+    endPointer(); current.motion.reset(); current.pose.refresh(current.motion.version); current.system.reset(); current.motion.tissueActivation(current.system);
+    buttockMap.setSystem(current.system); updateSurface(true, true); resume(); displayMotionControls();
+  };
   function updateRay(event) {
     const r = canvas.getBoundingClientRect();
     screen.set((event.clientX - r.left) / r.width * 2 - 1, -(event.clientY - r.top) / r.height * 2 + 1);
@@ -339,6 +388,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
   canvas.addEventListener('pointerdown', event => {
     if (!current || tool === 'orbit' || event.button !== 0 || pointer !== null) return;
     if (pendingShape) applyShape(); updateSurface();
+    current.pose.refresh(current.motion.version);
     updateRay(event); current.mesh.updateWorldMatrix(true, false);
     const hit = raycaster.intersectObject(current.mesh, false)[0];
     if (!hit) return;
@@ -348,7 +398,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
     const barycentric = triangle.getBarycoord(point, new THREE.Vector3());
     const anchor = barycentric ? surfaceGrabAnchor(current.system, current.mesh.geometry, hit.face, barycentric.toArray(), point.toArray()) : -1;
     if (anchor < 0) { notify('Touch the selected region and side, or choose Whole body.'); return; }
-    const affected = current.system.beginGrab(point.toArray(), n.toArray(), tool, anchor);
+    const affected = current.system.beginGrab(current.pose.toMaterial(anchor, point.toArray()), current.pose.directionToMaterial(anchor, n.toArray()), tool, anchor);
     if (!affected) { notify('Choose Whole body, or touch the selected region.'); current.system.endGrab(); return; }
     event.preventDefault(); event.stopImmediatePropagation(); resume();
     pointer = event.pointerId; grabCanvas = canvas; controls.enabled = false; showAnchor(anchor);
@@ -359,7 +409,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
     if (pointer !== event.pointerId || grabCanvas !== canvas || !current) return;
     event.preventDefault(); event.stopImmediatePropagation(); updateRay(event);
     if (raycaster.ray.intersectPlane(plane, worldPoint)) {
-      localPoint.copy(worldPoint); current.mesh.worldToLocal(localPoint); current.system.moveGrab(localPoint.toArray());
+      localPoint.copy(worldPoint); current.mesh.worldToLocal(localPoint); current.system.moveGrab(current.pose.toMaterial(current.system.grab.anchorId, localPoint.toArray()));
     }
   }, true);
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(type, event => {
@@ -378,16 +428,16 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
     if (!sample) return;
     if (tool === 'orbit') setTool('press');
     const point = [sample.x, sample.y, sample.z], normal = Array.from(current.system.normals.slice(sample.id * 3, sample.id * 3 + 3));
-    if (!current.system.beginGrab(point, normal, tool, sample.id)) return;
+    if (!current.system.beginGrab(current.pose.toMaterial(sample.id, point), normal, tool, sample.id)) return;
     event.preventDefault(); event.stopImmediatePropagation(); resume();
     pointer = event.pointerId; grabCanvas = mapCanvas; controls.enabled = false;
-    mapDrag = { pixel, point }; buttockMap.select(sample.id); mapCanvas.setPointerCapture(pointer);
+    mapDrag = { pixel, point, anchor: sample.id }; buttockMap.select(sample.id); mapCanvas.setPointerCapture(pointer);
   }, true);
   mapCanvas.addEventListener('pointermove', event => {
     if (pointer !== event.pointerId || grabCanvas !== mapCanvas || !mapDrag || !current) return;
     event.preventDefault(); event.stopImmediatePropagation();
     const pixel = mapPixel(event), delta = buttockMap.worldDelta(pixel.x - mapDrag.pixel.x, pixel.y - mapDrag.pixel.y);
-    current.system.moveGrab(mapDrag.point.map((v, k) => v + delta[k]));
+    current.system.moveGrab(current.pose.toMaterial(mapDrag.anchor, mapDrag.point.map((v, k) => v + delta[k])));
   }, true);
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) mapCanvas.addEventListener(type, event => {
     if (pointer !== event.pointerId || grabCanvas !== mapCanvas) return;
@@ -403,6 +453,9 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
       if (!current || document.hidden) return false;
       const start = performance.now();
       if (pendingShape) applyShape();
+      const moved = !current.system.paused && pointer === null && current.motion.step(delta);
+      const posed = current.pose.refresh(current.motion.version);
+      if (!current.system.paused && pointer === null && (current.motion.tissueActivation(current.system) || moved || posed)) current.system.wake();
       const stepped = current.system.step(delta);
       if (!$('physics-panel').hidden) buttockMap.update(now);
       const normals = now >= nextNormals || current.system.sleeping;
@@ -413,8 +466,11 @@ export function createBodyLab({ renderer, camera, controls, onReady, requestReal
       if (now - lastStatus > 350) {
         $('tissue-status').textContent = `${current.system.paused ? 'Paused' : current.system.sleeping ? 'Settled · sleeping' : current.system.grab ? 'Touching surface' : 'Simulating'} · ${(current.system.maxDisplacement * 1000).toFixed(1)} mm · CPU update ${averageCpu.toFixed(2)} ms`;
         lastStatus = now;
+        if (current.motion.running) displayMotionControls();
+        const joints = current.motion.selected($('motion-group').value, Number($('motion-side').value));
+        $('motion-status').textContent = `${pointer !== null ? 'Pose held during grab' : current.system.paused || current.motion.held ? 'Pose held' : current.motion.running ? 'Muscle loop' : 'Manual activation'} · ${joints.map(j => `${j.side === 1 ? 'Front right ' : j.side === -1 ? 'Front left ' : ''}${(j.angle * 180 / Math.PI).toFixed(1)}° · activation ${Math.round(j.activation[0] * 100)}/${Math.round(j.activation[1] * 100)}%`).join(' · ')}`;
       }
-      return changed;
+      return changed || moved;
 
     },
   };
