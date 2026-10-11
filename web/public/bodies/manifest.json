@@ -1,0 +1,34 @@
+{
+  "source": "MakeHuman / MPFB",
+  "anatomySource": "https://github.com/makehumancommunity/mhx2-makehuman-exchange",
+  "anatomyCommit": "d31fa95ddf9c9e4c7e7c3f21a865c94dfec92131",
+  "sourceCommit": "d0a32e57a7f915cb2f2b95410e2117648c7bbb7e",
+  "license": "CC0-1.0",
+  "units": "meters",
+  "models": {
+    "female": {
+      "heightMeters": 1.5897866666666667,
+      "vertices": 56349,
+      "triangles": 108080,
+      "particles": 1532,
+      "springs": 3683,
+      "bones": 163,
+      "textured": true,
+      "anatomy": "MHX2 joined external genital mesh",
+      "genitalParticles": 101,
+      "sha256": "9b5c1572411b001514783dcce397bc8d97c07b29e139e464231d81ad47f7dc49"
+    },
+    "male": {
+      "heightMeters": 1.7304,
+      "vertices": 56628,
+      "triangles": 108624,
+      "particles": 1867,
+      "springs": 4509,
+      "bones": 163,
+      "textured": true,
+      "anatomy": "MHX2 joined external genital mesh",
+      "genitalParticles": 171,
+      "sha256": "320362cbe32cb281d29ecfed5ec95d0040872968a152139ae05e6416543a0691"
+    }
+  }
+}

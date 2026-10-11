@@ -34,6 +34,7 @@ async function open(page) {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
+  await page.getByRole('button', { name: 'Studio demo', exact: true }).click();
   await expect(page.locator('#scene-stats')).toContainText('4 meshes');
   await expect.poll(() => page.locator('canvas').getAttribute('data-frames')).not.toBeNull();
   return errors;

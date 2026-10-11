@@ -1,0 +1,12 @@
+Male and female body assets derived from MakeHuman / MPFB.
+Source: https://github.com/makehumancommunity/mpfb2
+Commit: d0a32e57a7f915cb2f2b95410e2117648c7bbb7e
+License: CC0 1.0 Universal (body mesh, adult shape targets, rig, weights).
+Skin textures: MakeHuman system assets, CC0.
+https://static.makehumancommunity.org/assets/assetpacks/makehuman_system_assets.html
+Modified: adult shapes interpolated, units converted to meters, Catmull-Clark subdivision, glTF conversion, simulation cage.
+Additional external anatomy: MHX2 / Thomas Larsson, penis.mxa and vulva.mxa.
+Source: https://github.com/makehumancommunity/mhx2-makehuman-exchange
+Asset license clarification: https://thomasmakehuman.wordpress.com/license-information/ (extra importer content released CC0).
+Original historical license metadata is retained in the upstream sources.
+The simulation parameters and regions are illustrative and have not been calibrated to measured human tissue.

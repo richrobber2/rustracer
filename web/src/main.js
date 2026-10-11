@@ -2,6 +2,8 @@ import './style.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { PATH_PRESETS, PathTraceScheduler, renderPixelRatio } from './path-performance.js';
+import { createBodyLab } from './body-lab.js';
 
 const $ = (id) => document.getElementById(id);
 const host = $('canvas-host');
@@ -76,8 +78,14 @@ async function init() {
   scene.add(floor);
 
   let model = null, materials = [], originalMaterials = new Map();
+  let tissueLab = null;
   let mixer = null, animations = [], playing = false, action = null;
   let pathTracer = null, mode = 'realtime', modeLoading = false, paused = false;
+  let pathRequest = 0;
+  let realtimeQuality = 1, pathQuality = PATH_PRESETS.fast.quality;
+  let pathPreset = PATH_PRESETS.fast, pathFrameState = 'tracing';
+  const pathScheduler = new PathTraceScheduler();
+  const sampleLimit = () => Number($('sample-limit').value) || Infinity;
   let importSerial = 0, savedBaseScale = 1, materialTimer;
   let pendingExport = false, contextLost = false, disposed = false;
   const clock = new THREE.Clock();
@@ -85,11 +93,14 @@ async function init() {
   let frames = 0, framesThisSecond = 0, lastStatus = performance.now();
   const resize = () => {
     const { width, height } = host.getBoundingClientRect();
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2) * Number($('quality').value));
+    if (!width || !height) return;
+    const path = mode === 'path';
+    renderer.setPixelRatio(renderPixelRatio({ width, height, dpr: devicePixelRatio, quality: path ? pathQuality : realtimeQuality, path, pixelBudget: pathPreset.pixels }));
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    if (pathTracer) pathTracer.updateCamera();
+    $('path-resolution').textContent = `${renderer.domElement.width} × ${renderer.domElement.height} render · high-DPI scaling off`;
+    if (pathTracer) { pathTracer.updateCamera(); pathScheduler.cameraChanged(performance.now()); }
   };
   new ResizeObserver(resize).observe(host);
   resize();
@@ -100,7 +111,9 @@ async function init() {
     $('render-status').textContent = 'Graphics context lost';
   });
   renderer.domElement.addEventListener('webglcontextrestored', () => location.reload());
-  controls.addEventListener('change', () => { if (mode === 'path') pathTracer?.updateCamera(); });
+  controls.addEventListener('start', () => { if (mode === 'path') pathScheduler.begin(performance.now()); });
+  controls.addEventListener('end', () => { if (mode === 'path') pathScheduler.end(performance.now()); });
+  controls.addEventListener('change', () => { if (mode === 'path') pathScheduler.cameraChanged(performance.now()); });
   function updatePath(kind = 'scene') {
     if (!pathTracer || mode !== 'path') return;
     try {
@@ -116,7 +129,11 @@ async function init() {
     notify(`Path tracing is unavailable for this scene/browser: ${error.message}. Interactive rendering remains available.`, true);
   }
   function setRealtime() {
+    ++pathRequest;
     mode = 'realtime';
+    $('quality').value = realtimeQuality;
+    $('quality-value').value = `${Math.round(realtimeQuality * 100)}%`;
+    resize();
     $('mode-realtime').classList.add('active');
     pathButton.classList.remove('active');
     $('mode-realtime').setAttribute('aria-pressed', 'true');
@@ -127,32 +144,43 @@ async function init() {
   }
   async function setPath() {
     if (modeLoading || mode === 'path') return;
+    const request = ++pathRequest;
+    tissueLab?.pause();
     modeLoading = true; pathButton.disabled = true;
     notify('Preparing path tracing…', false, true);
     try {
       const { WebGLPathTracer } = await import('three-gpu-pathtracer');
+      if (request !== pathRequest) { notify('Interactive rendering'); return; }
       if (!pathTracer) {
         pathTracer = new WebGLPathTracer(renderer);
         pathTracer.textureSize.set(512, 512);
         pathTracer.tiles.set(2, 2);
-        pathTracer.renderDelay = 150;
-        pathTracer.fadeDuration = 250;
+        // The scheduler handles motion delay; avoid a second delay and blended preview.
+        pathTracer.renderDelay = 0;
+        pathTracer.fadeDuration = 0;
         pathTracer.minSamples = 1;
       }
       playing = false;
       $('play').textContent = 'Play animation';
       controls.autoRotate = false; $('orbit').checked = false;
       pathTracer.bounces = Number($('bounces').value);
+      pathTracer.transmissiveBounces = pathPreset.transmission;
+      pathTracer.filterGlossyFactor = pathPreset.glossy;
       pathTracer.pausePathTracing = false; paused = false;
       $('pause').textContent = 'Pause accumulation';
       pathTracer.setScene(scene, camera);
       mode = 'path';
+      pathScheduler.reset();
+      pathFrameState = 'tracing';
+      $('quality').value = pathQuality;
+      $('quality-value').value = `${Math.round(pathQuality * 100)}%`;
+      resize();
       $('mode-realtime').classList.remove('active');
       pathButton.classList.add('active');
       $('mode-realtime').setAttribute('aria-pressed', 'false');
       pathButton.setAttribute('aria-pressed', 'true');
       $('path-controls').hidden = false;
-      $('mode-description').textContent = 'Progressive lighting. Hold the camera still to refine.';
+      $('mode-description').textContent = 'Fast preview while moving. Hold still for path-traced lighting.';
       notify('Path tracing enabled. The first sample may take a moment.');
     } catch (error) { pathFailure(error); }
     finally { modeLoading = false; pathButton.disabled = false; }
@@ -160,15 +188,35 @@ async function init() {
   $('mode-realtime').onclick = setRealtime;
   pathButton.onclick = setPath;
   $('pause').onclick = () => {
+    if (!paused && pathTracer.samples >= sampleLimit()) {
+      $('sample-limit').value = '0';
+      $('pause').textContent = 'Pause accumulation';
+      return;
+    }
     paused = !paused; pathTracer.pausePathTracing = paused;
     $('pause').textContent = paused ? 'Resume accumulation' : 'Pause accumulation';
+  };
+  $('path-preset').onchange = () => {
+    pathPreset = PATH_PRESETS[$('path-preset').value] || pathPreset;
+    pathQuality = pathPreset.quality;
+    $('quality').value = pathQuality;
+    $('quality-value').value = `${Math.round(pathQuality * 100)}%`;
+    $('bounces').value = pathPreset.bounces;
+    $('bounces-value').value = String(pathPreset.bounces);
+    if (pathTracer) {
+      pathTracer.bounces = pathPreset.bounces;
+      pathTracer.transmissiveBounces = pathPreset.transmission;
+      pathTracer.filterGlossyFactor = pathPreset.glossy;
+    }
+    resize();
   };
 
   function release(object) {
     if (!object) return;
-    const geometries = new Set(), mats = new Set(), textures = new Set();
+    const geometries = new Set(), mats = new Set(), textures = new Set(), skeletons = new Set();
     object.traverse((node) => {
       if (node.geometry) geometries.add(node.geometry);
+      if (node.skeleton) skeletons.add(node.skeleton);
       for (const mat of Array.isArray(node.material) ? node.material : [node.material]) {
         if (!mat) continue;
         mats.add(mat);
@@ -178,6 +226,7 @@ async function init() {
     geometries.forEach((g) => g.dispose());
     mats.forEach((m) => m.dispose());
     textures.forEach((t) => t.dispose());
+    skeletons.forEach((s) => s.dispose());
   }
   function updateMaterialUI() {
     const material = materials[Number($('material').value)];
@@ -232,7 +281,8 @@ async function init() {
     controls.target.copy(center); camera.lookAt(center); controls.update();
     if (mode === 'path') pathTracer.updateCamera();
   }
-  function replaceModel(object, name, clips = []) {
+  function replaceModel(object, name, clips = [], isBody = false) {
+    if (!isBody) tissueLab?.detach();
     if (mixer) { mixer.stopAllAction(); mixer.uncacheRoot(model); }
     const old = model;
     if (old) scene.remove(old);
@@ -291,9 +341,13 @@ async function init() {
       const value = Number($(id).value); $(`${id}-value`).value = format(value); fn(value);
     });
   }
-  slider('quality', (v) => `${Math.round(v * 100)}%`, resize);
+  slider('quality', (v) => `${Math.round(v * 100)}%`, (v) => {
+    if (mode === 'path') { pathQuality = v; $('path-preset').value = 'custom'; }
+    else realtimeQuality = v;
+    resize();
+  });
   slider('fov', (v) => `${v}°`, (v) => { camera.fov = v; camera.updateProjectionMatrix(); if (mode === 'path') pathTracer.updateCamera(); });
-  slider('bounces', String, (v) => { if (pathTracer) { pathTracer.bounces = v; pathTracer.reset(); } });
+  slider('bounces', String, (v) => { $('path-preset').value = 'custom'; if (pathTracer) { pathTracer.bounces = v; pathTracer.reset(); } });
   slider('exposure', (v) => v.toFixed(1), (v) => { renderer.toneMappingExposure = v; pathTracer?.reset(); });
   slider('environment', (v) => v.toFixed(1), (v) => { scene.environmentIntensity = v; updatePath('environment'); });
   slider('light', (v) => v.toFixed(1), (v) => { key.intensity = v; updatePath('lights'); });
@@ -416,25 +470,38 @@ async function init() {
   function animate(now) {
     if (disposed) return;
     requestAnimationFrame(animate);
-    if (contextLost) return;
+    if (contextLost || document.hidden) return;
     const delta = Math.min(clock.getDelta(), 0.1);
     controls.update(delta);
     if (playing && mixer) mixer.update(delta);
+    if (mode === 'realtime') tissueLab?.update(delta, now);
     try {
-      if (mode === 'path') pathTracer.renderSample(); else renderer.render(scene, camera);
+      if (mode === 'path') {
+        pathFrameState = pathScheduler.render({ now, tracer: pathTracer, rasterize: () => renderer.render(scene, camera), paused, sampleLimit: sampleLimit(), hidden: document.hidden });
+      } else renderer.render(scene, camera);
     } catch (error) {
       if (mode === 'path') pathFailure(error); else { contextLost = true; notify(`Rendering failed: ${error.message}`, true, true); }
     }
     renderer.domElement.dataset.frames = ++frames;
     framesThisSecond++;
     if (now - lastStatus > 500) {
-      $('render-status').textContent = mode === 'path'
-        ? (pathTracer.isCompiling ? 'Compiling path tracer…' : `${paused ? 'Paused · ' : ''}${Math.floor(pathTracer.samples)} samples · Path traced`)
-        : `Interactive · ${Math.round(framesThisSecond * 1000 / (now - lastStatus))} fps`;
+      if (mode === 'path') {
+        const count = Math.floor(pathTracer.samples);
+        $('render-status').textContent = pathFrameState === 'preview' ? 'Moving · fast preview'
+          : pathTracer.isCompiling ? 'Compiling path tracer…'
+          : `${paused ? 'Paused · ' : pathFrameState === 'complete' ? 'Done · ' : ''}${count} samples · Path traced`;
+        $('pause').textContent = paused ? 'Resume accumulation' : pathFrameState === 'complete' ? 'Refine further' : 'Pause accumulation';
+      } else $('render-status').textContent = `Interactive · ${Math.round(framesThisSecond * 1000 / (now - lastStatus))} fps`;
       framesThisSecond = 0; lastStatus = now;
     }
     if (pendingExport) { pendingExport = false; exportImage(); }
   }
+  tissueLab = createBodyLab({
+    renderer, camera, controls, notify,
+    requestRealtime: () => { if (mode !== 'realtime' || modeLoading) setRealtime(); },
+    onReady: (object, name) => { ++importSerial; replaceModel(object, name, [], true); frame('front'); },
+  });
+  tissueLab.load('female');
   requestAnimationFrame(animate);
   // Pause GPU work when the page is being closed.
   window.addEventListener('pagehide', () => { disposed = true; }, { once: true });
