@@ -17,7 +17,7 @@ for(const sex of ['female','male']) {
    const id=ids.reduce((a,b)=>Math.abs(s.rest[a*3])<Math.abs(s.rest[b*3])?a:b);
    assert.ok(s.beginGrab(Array.from(s.rest.slice(id*3,id*3+3)),Array.from(s.normals.slice(id*3,id*3+3)),tool)>0);
    assert.ok(s.grab.ids.every(i=>s.rest[i*3]*side>0));run(s,1);
-   let active=0,opposite=0;for(let i=0;i<s.count;i++)if(s.regions[i]===9){const v=Math.hypot(...s.offset.slice(i*3,i*3+3));if(s.rest[i*3]*side>0)active=Math.max(active,v);else opposite=Math.max(opposite,v);}
+   let active=0,opposite=0;for(let i=0;i<s.count;i++)if(s.regions[i]===9){const v=Math.hypot(...s.offset.slice(i*3,i*3+3));if(s.rest[i*3]*side>0)active=Math.max(active,v);else if(s.rest[i*3]*side<0)opposite=Math.max(opposite,v);}
    assert.ok(active>.005);assert.ok(opposite<.00005,`${sex} opposite ${opposite} region ${region}`);
   }
   for(const side of [-1,1]) {

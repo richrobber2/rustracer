@@ -1,10 +1,14 @@
 // An illustrative anchored surface spring network, not calibrated biomechanics.
 // Material-frame displacements are in meters; the rig carries the rest surface.
-import { upperRegion, isSideRegion, upperBoundary, buildUpperLinks } from './upper-body.js';
+import { upperRegion, isSideRegion, sideOf, upperBoundary, buildUpperLinks } from './upper-body.js';
 import { eligibleGrabAnchor } from './grab-points.js';
 import { abdominalRegion, abdominalBoundary, buildAbdominalLinks, regionMatches } from './abdomen.js';
 const SOFTNESS = [0.12, 0.8, 0.95, 0.9, 0.5, 0.7, 0.4, 0.06, 1, .9, .45, .5, .55, .16, .65, .55];
 const DT = 1 / 120;
+// Semi-implicit Euler with per-step decay c is stable while k·dt² < 2(1 + c) / c.
+// Keep the stiffest coupled mode below this fraction of that limit.
+const STABILITY_MARGIN = .8;
+const GRAB_STIFFNESS = 1800;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export class TissueSystem {
@@ -50,11 +54,17 @@ export class TissueSystem {
     this.decay = new Float32Array(this.count);
     this.limits = new Float32Array(this.count);
     this.edgeFactors = new Float32Array(this.edges.length / 2);
+    // 0: reciprocal; 1 or 2: only end a or b (a centre-line sample) receives
+    // the force, so it follows both sides without carrying load across.
+    this.edgeFollower = new Uint8Array(this.edges.length / 2);
     this.degree = new Uint16Array(this.count);
     for (const id of this.edges) this.degree[id]++;
     for (let e = 0; e < this.edges.length; e += 2) {
       const a = this.edges[e], b = this.edges[e + 1];
-      const crossesPosterior = (data.regions[a] === 3 || data.regions[b] === 3 || isSideRegion(this.regions[a]) || isSideRegion(this.regions[b])) && this.rest[a * 3] * this.rest[b * 3] <= 0;
+      const sa = sideOf(this.rest[a * 3]), sb = sideOf(this.rest[b * 3]);
+      const sided = data.regions[a] === 3 || data.regions[b] === 3 || isSideRegion(this.regions[a]) || isSideRegion(this.regions[b]);
+      const crossesPosterior = sided && sa * sb < 0;
+      if (sided && (sa === 0) !== (sb === 0)) this.edgeFollower[e / 2] = sa === 0 ? 1 : 2;
       const lumbarBoundary = (this.regions[a] === 9 && this.regions[b] === 10) || (this.regions[b] === 9 && this.regions[a] === 10);
       // Regional bridges below own the pelvis-to-back connection, including its off switch.
       this.edgeFactors[e / 2] = crossesPosterior || lumbarBoundary || upperBoundary(this.regions[a], this.regions[b]) || abdominalBoundary(this.regions[a], this.regions[b]) ? 0 : 1 / Math.sqrt(Math.max(1, this.degree[a] * this.degree[b]));
@@ -132,6 +142,38 @@ export class TissueSystem {
       if (this.regions[i] === 14 || this.regions[i] === 15) this.decay[i] = Math.exp(-(2 + p.absDamping * 36) * DT);
       this.limits[i] = genital ? Math.min(.06, (this.sex === 'female' ? .010 : .035) * p.genitalScale) : (.006 + .055 * soft) * (this.regions[i] === 9 ? (1 - .65 * this.buttAttachment[i]) * Math.sqrt(fat) : 1);
       if (this.regions[i] === 13) this.limits[i] = Math.min(.012, this.limits[i]);
+    }
+    this.refreshStiffnessCaps();
+  }
+  refreshStiffnessCaps() {
+    // Bound each particle's largest stiffness (Gershgorin: support + 2·Σ links
+    // + grab spring) and cap the support spring so muscle activation and slider
+    // extremes cannot exceed the integrator's stability limit.
+    const p = this.parameters, links = this.linkStiffness ||= new Float32Array(this.count);
+    this.edgeK = 18 + p.stiffness * .5;
+    this.lumbarK = (120 + p.stiffness * 5) * p.lumbarCoupling;
+    this.regionalK = 400 + p.stiffness * 20;
+    links.fill(0);
+    for (let e = 0; e < this.edges.length; e += 2) {
+      const k = this.edgeK * this.edgeFactors[e / 2], follower = this.edgeFollower[e / 2];
+      if (follower !== 2) links[this.edges[e]] += k;
+      if (follower !== 1) links[this.edges[e + 1]] += k;
+    }
+    for (let e = 0; e < this.lumbarLinks.length; e += 2) {
+      const k = this.lumbarK * this.lumbarFactors[e / 2];
+      links[this.lumbarLinks[e]] += k; links[this.lumbarLinks[e + 1]] += k;
+    }
+    for (const group of this.regionalLinks) {
+      const baseK = this.regionalK * p[group.parameter];
+      for (let e = 0; e < group.ids.length; e += 2) {
+        const k = baseK * group.factors[e / 2];
+        links[group.ids[e]] += k; links[group.ids[e + 1]] += k;
+      }
+    }
+    const caps = this.stiffnessCap ||= new Float32Array(this.count);
+    for (let i = 0; i < this.count; i++) {
+      const c = this.decay[i], limit = STABILITY_MARGIN * 2 * (1 + c) / (c * DT * DT);
+      caps[i] = Math.max(0, limit - 2 * links[i] - GRAB_STIFFNESS * this.softness[i]);
     }
   }
   configure(values) {
@@ -226,7 +268,7 @@ export class TissueSystem {
   }
 
   integrate(dt) {
-    const { stiffness, damping, gravity, tension, strength, region } = this.parameters;
+    const { gravity, strength } = this.parameters;
     const d = this.offset, v = this.velocity, f = this.force;
     this.time += dt;
     const oscillation = this.vibration ? Math.sin(this.time * 2 * Math.PI * 2.5) * 8 * strength : 0;
@@ -235,26 +277,26 @@ export class TissueSystem {
       const j = i * 3, soft = this.softness[i];
       const selected = this.selected(i);
       const activation = this.activation?.[i] || 0;
-      const k = this.support[i] * (1 + activation * 1.5), bulge = this.bulge[i] + .003 * activation * soft;
+      const k = Math.min(this.support[i] * (1 + activation * 1.5), this.stiffnessCap[i]), bulge = this.bulge[i] + .003 * activation * soft;
       for (let axis = 0; axis < 3; axis++) f[j + axis] = -k * (d[j + axis] - this.normals[j + axis] * bulge);
       if (this.pose) for (let axis = 0; axis < 3; axis++) f[j + axis] += 9.81 * gravity * soft * this.pose.gravity[j + axis];
       else f[j + 1] -= 9.81 * gravity * soft;
       if (this.vibration && selected) f[j] += oscillation * soft;
     }
     // Neighbor coupling transmits a local deformation through the tissue surface.
-    const coupling = 18 + stiffness * 0.5;
     for (let e = 0; e < this.edges.length; e += 2) {
       const a = this.edges[e], b = this.edges[e + 1];
-      const k = coupling * this.edgeFactors[e / 2];
+      const k = this.edgeK * this.edgeFactors[e / 2], follower = this.edgeFollower[e / 2];
       for (let axis = 0; axis < 3; axis++) {
         const ia = a * 3 + axis, ib = b * 3 + axis;
         const force = (d[ib] - d[ia]) * k;
-        f[ia] += force; f[ib] -= force;
+        if (follower !== 2) f[ia] += force;
+        if (follower !== 1) f[ib] -= force;
       }
     }
     // Reciprocal force transfer: pulling either end loads the other. No mirrored
     // offsets or direct stimulation of the unselected region is involved.
-    const lumbarK = (120 + stiffness * 5) * this.parameters.lumbarCoupling;
+    const lumbarK = this.lumbarK;
     for (let e = 0; e < this.lumbarLinks.length; e += 2) {
       const a = this.lumbarLinks[e], b = this.lumbarLinks[e + 1], k = lumbarK * this.lumbarFactors[e / 2];
       for (let axis = 0; axis < 3; axis++) {
@@ -263,7 +305,7 @@ export class TissueSystem {
       }
     }
     for (const group of this.regionalLinks) {
-      const baseK = (400 + stiffness * 20) * this.parameters[group.parameter];
+      const baseK = this.regionalK * this.parameters[group.parameter];
       for (let e = 0; e < group.ids.length; e += 2) {
         const a = group.ids[e], b = group.ids[e + 1], k = baseK * group.factors[e / 2];
         for (let axis = 0; axis < 3; axis++) {
@@ -278,7 +320,7 @@ export class TissueSystem {
         const i = g.ids[t], soft = this.softness[i], j = i * 3;
         for (let axis = 0; axis < 3; axis++) {
           const goal = g.startOffset[t * 3 + axis] + clamp(g.target[axis] - g.origin[axis] + g.normal[axis] * g.direction * .025 * g.strength, -.08, .08);
-          f[j + axis] += (goal - d[j + axis]) * 1800 * g.weights[t] * soft;
+          f[j + axis] += (goal - d[j + axis]) * GRAB_STIFFNESS * g.weights[t] * soft;
         }
       }
     }
