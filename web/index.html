@@ -1,15 +1,15 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#111519"><title>Rustracer · Body creator</title></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#111519"><meta name="description" content="Anatomy and soft-tissue learning through labelled regions and controlled, illustrative biomechanical demonstrations."><title>Rustracer · Medical learning lab</title></head>
 <body>
   <header class="topbar">
-    <a class="brand" href="./" aria-label="Rustracer home"><span class="brand-icon">R</span><span>rustracer<span class="brand-sub">BODY CREATOR</span></span></a>
-    <span class="project-name"><span class="live-dot"></span> Character study <span class="local-badge">LOCAL</span></span>
+    <a class="brand" href="./" aria-label="Rustracer home"><span class="brand-icon">R</span><span>rustracer<span class="brand-sub">ANATOMY LAB</span></span></a>
+    <span class="project-name"><span class="live-dot"></span> Medical learning <span class="local-badge">LOCAL</span></span>
     <div class="header-actions"><a href="./skin.html" class="quiet">Skin study</a><button id="reset" class="quiet">Reset view</button><button id="export" class="quiet">↓ Export PNG</button><button id="open" class="primary">＋ Import model</button></div>
   </header>
   <main>
     <section id="viewport" aria-label="Interactive 3D viewport">
-      <div class="viewport-heading"><span class="eyebrow">HUMAN BODY LAB</span><h1>Shape. Move. Compare.</h1><p>Create adult proportions and explore tissue response.</p></div>
+      <div class="viewport-heading"><span class="eyebrow">ANATOMY &amp; BIOMECHANICS</span><h1>Observe. Compare. Learn.</h1><p>Explore external anatomy and simplified tissue mechanics.</p></div>
       <div class="viewport-toolbar"><button data-body="female">Female</button><button data-body="male">Male</button><button id="demo" aria-label="Studio demo">Studio</button><button id="frame">Frame</button><button id="fullscreen" aria-label="Toggle fullscreen">⛶</button></div>
       <div class="tissue-tools segmented" role="group" aria-label="Surface interaction"><button data-tissue-tool="orbit" class="active" aria-pressed="true">Orbit</button><button data-tissue-tool="press" aria-pressed="false">Press</button><button data-tissue-tool="pull" aria-pressed="false">Pull</button></div>
       <div id="canvas-host"></div>
@@ -18,9 +18,14 @@
       <footer class="viewport-footer"><span><span class="live-dot"></span><span id="render-status">Starting renderer…</span></span><span id="scene-stats">—</span><span class="mouse-help">Drag to orbit · Right drag to pan · Scroll to zoom</span></footer>
     </section>
     <aside aria-label="Scene controls">
-      <div class="panel-title"><h2>Character creator</h2><span class="panel-tag">LIVE</span></div>
-      <p class="panel-intro">Choose proportions. Test the response.</p>
-      <div class="creator-tabs segmented" role="tablist" aria-label="Workspace"><button id="tab-creator" role="tab" aria-selected="true" aria-controls="creator-panel" data-panel-tab="creator" class="active">Create</button><button id="tab-physics" role="tab" aria-selected="false" aria-controls="physics-panel" data-panel-tab="physics" tabindex="-1">Physics</button><button id="tab-studio" role="tab" aria-selected="false" aria-controls="studio-panel" data-panel-tab="studio" tabindex="-1">Render</button></div>
+      <div class="panel-title"><h2>Medical learning</h2><span class="panel-tag">LIVE</span></div>
+      <p class="panel-intro">Locate regions. Change one variable. Compare the response.</p>
+      <details class="tissue-notes"><summary>Learning guide &amp; model limits</summary>
+        <p>This visual learning prototype combines labelled external regions with simplified surface mechanics. Internal organs, muscle layers and biological tissue properties are not reconstructed or clinically validated.</p>
+        <ol><li>Choose a body and a regional view in Anatomy.</li><li>Use Hold pose in Mechanics to keep joints still, then press, pull and release. Observe displacement in the 2D map.</li><li>Change one control at a time. Save study A and B to compare responses.</li></ol>
+        <p>Controls represent relative demonstration settings, not normal clinical ranges. Automated checks verify software behavior; they do not establish medical accuracy. Use anatomy references alongside the model, not this prototype for diagnosis or procedure training.</p>
+      </details>
+      <div class="creator-tabs segmented" role="tablist" aria-label="Workspace"><button id="tab-creator" role="tab" aria-selected="true" aria-controls="creator-panel" data-panel-tab="creator" class="active">Anatomy</button><button id="tab-physics" role="tab" aria-selected="false" aria-controls="physics-panel" data-panel-tab="physics" tabindex="-1">Mechanics</button><button id="tab-studio" role="tab" aria-selected="false" aria-controls="studio-panel" data-panel-tab="studio" tabindex="-1">Render</button></div>
       <section id="creator-panel" class="control-section creator-panel" data-panel="creator" role="tabpanel" aria-labelledby="tab-creator">
         <h3>01 <span>Adult body</span></h3>
         <label class="select-label" for="body-model">Body<select id="body-model"><option value="" disabled>Choose a body</option><option value="female" selected>Female</option><option value="male">Male</option></select></label>
@@ -38,7 +43,7 @@
         <label class="slider-label" for="skin-buttockTexture">Buttock texture <output id="skin-buttockTexture-value">70%</output></label><input id="skin-buttockTexture" type="range" min="0" max="1" step="0.05" value="0.7">
         <button id="skin-reset" class="wide quiet">Reset skin appearance</button>
         <p class="hint">Fine pores respond to the light in Skin view. Buttock texture adds subtle skin-tone variation and a softer matte finish; use Rear view above to inspect it. Lower roughness increases shine. Original skin provides a comparison.</p></details>
-        <h3 class="saved-title">Character presets</h3>
+        <h3 class="saved-title">Study presets</h3>
         <div class="save-slots"><div><span>A</span><button data-save-character="a">Save A</button><button data-load-character="a">Load A</button></div><div><span>B</span><button data-save-character="b">Save B</button><button data-load-character="b">Load B</button></div></div>
         <div class="preset-row"><button id="character-export">Export preset</button><button id="character-import">Import preset</button></div>
         </fieldset>
@@ -98,11 +103,14 @@
           <label class="slider-label" for="tissue-genitalDamping">Damping <output id="tissue-genitalDamping-value">50%</output></label><input id="tissue-genitalDamping" type="range" min="0" max="1" step="0.05" value="0.5">
           <p class="hint">External tissue with a supported attachment. Proportions also change its response and movement limit.</p></details>
           <details id="anal-controls" class="genital-controls"><summary>Anus / perianal tissue response</summary>
-          <label class="slider-label" for="tissue-analStretch">Ring stretch <output id="tissue-analStretch-value">0%</output></label><input id="tissue-analStretch" type="range" min="0" max="1" step="0.05" value="0">
+          <label class="slider-label" for="tissue-analStretch">Surface-ring stretch <output id="tissue-analStretch-value">0%</output></label><input id="tissue-analStretch" type="range" min="0" max="1" step="0.05" value="0">
           <button id="anal-release" class="wide quiet">Release stretch</button>
           <label class="slider-label" for="tissue-analCompliance">Compliance <output id="tissue-analCompliance-value">1.0×</output></label><input id="tissue-analCompliance" type="range" min="0.5" max="2" step="0.05" value="1">
           <label class="slider-label" for="tissue-analDamping">Damping <output id="tissue-analDamping-value">65%</output></label><input id="tissue-analDamping" type="range" min="0" max="1" step="0.05" value="0.65">
-          <p class="hint">Ring stretch pulls the surrounding surface outward; Release stretch lets it recover. Press or pull dots in the anal map for local movement. The region has a 6 mm movement limit. Size and depth are under Create. This is a closed external surface without an internal canal or sphincter muscle model.</p></details>
+          <p class="hint">Ring stretch pulls the surrounding surface outward; Release stretch lets it recover. Press or pull dots in the anal map for local movement. The region has a 6 mm movement limit. Size and depth are under Anatomy. This is a closed external surface without an internal canal or sphincter muscle model.</p></details>
+          <details class="tissue-notes"><summary>Anatomy reference: anus &amp; sphincters</summary>
+          <p>The anus is the terminal opening of the digestive tract. Sphincter muscles contribute to control of bowel movements. <a href="https://www.niddk.nih.gov/health-information/digestive-diseases/anatomic-problems-lower-gi-tract/about-lower-gi-tract" target="_blank" rel="noopener noreferrer">Read the NIDDK anatomy reference</a>.</p>
+          <p>This viewer shows a closed external surface patch. Surface-ring stretch demonstrates deformation, not sphincter relaxation or bowel function. The anal canal, rectum, sphincter layers and their neural control are not simulated. Its movement limits are software tuning values, not physiological measurements.</p></details>
           <section class="buttock-map-panel" aria-labelledby="buttock-map-title">
           <h3 id="buttock-map-title">2D displacement & grab points</h3>
           <label class="select-label" for="tissue-mapRegion">Map region<select id="tissue-mapRegion"><option value="abs">Abs & obliques · front</option><option value="upper" selected>Upper back → shoulders → hands</option><option value="pelvis">Buttocks & lower back</option><option value="anal">Anal / perianal surface</option></select></label>
