@@ -59,11 +59,13 @@ export function createSkinMaps(size = 256) {
 }
 
 export class SkinAppearance {
-  constructor(source, renderer, geometry = null, data = null) {
+  constructor(source, renderer, geometry = null, data = null, cleanMap = null) {
     this.sourceMap = source.map; this.sourceRoughness = source.roughness; this.maps = createSkinMaps();
+    this.cleanMap = cleanMap;
     this.buttocks = geometry && data ? new ButtockSkin(geometry, data, this.maps.roughness) : null;
     const anisotropy = Math.max(1, Math.min(4, renderer?.capabilities?.getMaxAnisotropy?.() || 1));
     if (this.sourceMap) this.sourceMap.anisotropy = anisotropy;
+    if (this.cleanMap) this.cleanMap.anisotropy = anisotropy;
     this.maps.normal.anisotropy = this.maps.roughness.anisotropy = anisotropy;
     if (this.buttocks) this.buttocks.roughness.anisotropy = anisotropy;
     this.material = new THREE.MeshPhysicalMaterial({ name: source.name || 'Skin', map: source.map, color: source.color, roughness: source.roughness, metalness: 0, side: source.side });
@@ -77,7 +79,7 @@ export class SkinAppearance {
     const buttocks = detailed && p.buttockTexture > 0 && this.buttocks;
     const hasNormal = Boolean(m.normalMap), hasRoughness = Boolean(m.roughnessMap), wasSkin = Boolean(m.map);
     const hadColors = m.vertexColors, wasWire = m.wireframe;
-    m.map = skin ? this.sourceMap : null;
+    m.map = skin ? (detailed && this.cleanMap ? this.cleanMap : this.sourceMap) : null;
     m.normalMap = detailed && p.detail > 0 ? this.maps.normal : null;
     m.roughnessMap = detailed ? (buttocks ? this.buttocks.roughness : this.maps.roughness) : null;
     m.normalScale.setScalar(p.detail * .3);
@@ -90,5 +92,5 @@ export class SkinAppearance {
   }
   // Maps can be temporarily removed in clay/heat/wire, so their owner disposes
   // them even when the generic scene cleanup cannot find them on the material.
-  dispose() { this.maps.normal.dispose(); this.maps.roughness.dispose(); this.buttocks?.dispose(); }
+  dispose() { this.maps.normal.dispose(); this.maps.roughness.dispose(); this.buttocks?.dispose(); this.cleanMap?.dispose(); this.cleanMap?.image?.close?.(); }
 }

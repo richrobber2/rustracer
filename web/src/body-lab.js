@@ -259,16 +259,19 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
     $('tissue-status').textContent = `Loading ${sex} body…`;
     $('creator-status').textContent = `Loading ${sex} anatomy…`;
     $('body-model').value = sex;
-    let gltf, skinAppearance;
+    let gltf, skinAppearance, cleanBitmap, cleanTexture;
     try {
       const modelUrl = new URL(`./bodies/${sex}.glb?v=2`, document.baseURI).href;
       const cageUrl = new URL(`./bodies/${sex}-cage.json?v=2`, document.baseURI).href;
-      const responses = await Promise.all([fetch(cageUrl, { signal }), fetch(modelUrl, { signal })]);
+      const skinUrl = new URL(`./bodies/${sex}-skin-clean.webp?v=1`, document.baseURI).href;
+      const responses = await Promise.all([fetch(cageUrl, { signal }), fetch(modelUrl, { signal }), fetch(skinUrl, { signal })]);
       if (responses.some(r => !r.ok)) throw new Error('Body data could not load');
       const [sourceData, bytes] = await Promise.all([responses[0].json(), responses[1].arrayBuffer()]);
       if (request !== serial) return;
       gltf = await new GLTFLoader().parseAsync(bytes, new URL('./bodies/', document.baseURI).href);
       if (request !== serial) { disposeObject(gltf.scene); return; }
+      cleanBitmap = await createImageBitmap(await responses[2].blob(), { imageOrientation: 'none', premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+      if (request !== serial) { cleanBitmap.close?.(); disposeObject(gltf.scene); return; }
       let mesh;
       gltf.scene.traverse(node => { if (node.geometry?.attributes._cage_index) mesh = node; });
       if (!mesh) throw new Error('This body has no tissue controls.');
@@ -277,7 +280,9 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
       const color = new THREE.Float32BufferAttribute(new Float32Array(geometry.attributes.position.count * 3), 3);
       geometry.setAttribute('color', color);
       const sourceMaterial = mesh.material;
-      skinAppearance = new SkinAppearance(sourceMaterial, renderer, geometry, data);
+      cleanTexture = sourceMaterial.map.clone(); cleanTexture.source = new THREE.Source(cleanBitmap);
+      cleanTexture.colorSpace = THREE.SRGBColorSpace; cleanTexture.flipY = false; cleanTexture.needsUpdate = true;
+      skinAppearance = new SkinAppearance(sourceMaterial, renderer, geometry, data, cleanTexture);
       skinAppearance.configure(sanitizeSkin(character?.appearance));
       mesh.material = skinAppearance.material; sourceMaterial.dispose();
       endPointer(); requestRealtime();
@@ -301,7 +306,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
       if (current) { current.mesh.material.map = current.skinMap; current.skin.dispose(); }
       const accessories = [];
       gltf.scene.traverse(node => { if (node.isMesh && node !== mesh) accessories.push({ mesh: node, morph: new BodyMorph(node.geometry.attributes.position.array, null, data) }); });
-      current = { object: gltf.scene, mesh, system, data, sex, motion, pose, skin: skinAppearance, skinMap: mesh.material.map,
+      current = { object: gltf.scene, mesh, system, data, sex, motion, pose, skin: skinAppearance, skinMap: skinAppearance.sourceMap,
         deformer: new SurfaceDeformer(geometry, system.count),
         morph: new BodyMorph(geometry.attributes.position.array, geometry.attributes._genital_weight.array, data, geometry.attributes._anal_weight.array),
         cageMorph: new BodyMorph(data.positions, data.genitalWeights, data, data.analWeights), accessories };
@@ -325,9 +330,12 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
       $('tissue-status').textContent = 'Ready · choose Press or Pull to touch the surface';
       setButtons(); setTool(tool); applyView();
     } catch (error) {
+      if (gltf && current?.object !== gltf.scene) {
+        if (skinAppearance) skinAppearance.dispose(); else { cleanTexture?.dispose(); cleanBitmap?.close?.(); }
+        disposeObject(gltf.scene);
+      }
       if (request !== serial || error.name === 'AbortError') return;
       $('tissue-fields').disabled = !current; $('creator-fields').disabled = !current;
-      if (gltf && current?.object !== gltf.scene) { skinAppearance?.dispose(); disposeObject(gltf.scene); }
       $('body-model').value = current?.sex || '';
       $('tissue-status').textContent = `Could not load body: ${error.message}`;
       $('creator-status').textContent = `Could not load body: ${error.message}`;

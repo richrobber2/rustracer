@@ -75,3 +75,18 @@ test('appearance presets sanitize values and older characters keep neutral appea
   assert.deepEqual(preset.appearance, appearance); assert.deepEqual(readCharacter(JSON.parse(JSON.stringify(preset))).appearance, appearance);
   assert.equal(readCharacter({ version: 1, sex: 'male' }).appearance, undefined);
 });
+
+test('clean diffuse atlas is the detailed default, keeps the original comparison and owns its cleanup', () => {
+  const original = new THREE.Texture(), clean = new THREE.Texture(); let disposed = 0, closed = 0;
+  clean.image = { close() { closed++; } }; clean.colorSpace = THREE.SRGBColorSpace;
+  clean.addEventListener('dispose', () => disposed++);
+  const source = new THREE.MeshStandardMaterial({ map: original }), skin = new SkinAppearance(source, null, null, null, clean);
+  assert.equal(skin.material.map, clean); assert.equal(clean.colorSpace, THREE.SRGBColorSpace);
+  skin.configure({ finish: 'original' }); assert.equal(skin.material.map, original);
+  skin.configure({ finish: 'detailed' }); assert.equal(skin.material.map, clean);
+  skin.setView('heat'); assert.equal(skin.material.map, null);
+  skin.setView('skin'); assert.equal(skin.material.map, clean);
+  const table = new MaterialsTexture(); table.updateFrom([skin.material], [clean, skin.maps.normal, skin.maps.roughness]); assert.equal(table.image.data[3], 0);
+  skin.setView('clay'); skin.dispose(); assert.equal(disposed, 1); assert.equal(closed, 1);
+  source.dispose(); skin.material.dispose(); original.dispose(); table.dispose();
+});

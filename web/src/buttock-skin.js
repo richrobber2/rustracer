@@ -31,7 +31,7 @@ export function buttockSkinField(point, height, exclusion = 0) {
   const variation = (grain - .5) * .018 + (broad - .5) * .025;
   return {
     weight,
-    tint: [weight * (variation + warmth * .009), weight * (variation - warmth * .019), weight * (variation - warmth * .033)],
+    tint: [weight * variation, weight * variation, weight * variation],
     matte: weight * (.032 + grain * .036 + warmth * .02),
   };
 }

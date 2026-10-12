@@ -44,6 +44,7 @@ test('actual map controls capture a displaced sample, cancel, and release on pan
     const value = String(url);
     if (value.includes('female-cage.json')) return new Response(fs.readFileSync(new URL('../public/bodies/female-cage.json', import.meta.url)), { headers: { 'content-type': 'application/json' } });
     if (value.includes('female.glb')) return new Response(fs.readFileSync(new URL('../public/bodies/female.glb', import.meta.url)));
+    if (value.includes('female-skin-clean.webp')) return new Response(fs.readFileSync(new URL('../public/bodies/female-skin-clean.webp', import.meta.url)));
     return original.fetch(url, options); // Embedded texture blob URL only.
   };
   const controls = { enabled: true, target: new THREE.Vector3(), update() {} }, renderer = { domElement: new Element() }, notifications = [];
@@ -54,9 +55,10 @@ test('actual map controls capture a displaced sample, cancel, and release on pan
   assert.ok(skinMesh.material.normalMap && skinMesh.material.roughnessMap);
   const colorMap = skinMesh.material.map;
   elements.get('skin-finish').value = 'original'; elements.get('skin-finish').onchange();
-  assert.equal(skinMesh.material.normalMap, null); assert.equal(skinMesh.material.map, colorMap);
+  assert.equal(skinMesh.material.normalMap, null); assert.notEqual(skinMesh.material.map, colorMap);
+  assert.notEqual(skinMesh.material.map.image, colorMap.image, 'The cleaned atlas must not overwrite the original texture Source');
   assert.ok(elements.get('skin-detail').disabled && elements.get('skin-buttockTexture').disabled);
-  elements.get('skin-reset').onclick(); assert.ok(skinMesh.material.normalMap); assert.equal(elements.get('skin-detail').disabled, false);
+  elements.get('skin-reset').onclick(); assert.ok(skinMesh.material.normalMap); assert.equal(elements.get('skin-detail').disabled, false); assert.equal(skinMesh.material.map, colorMap);
   elements.get('tissue-view').value = 'heat'; elements.get('tissue-view').onchange();
   assert.equal(skinMesh.material.normalMap, null); assert.equal(skinMesh.material.roughnessMap, null);
   elements.get('skin-detail').value = '.9'; elements.get('skin-detail').oninput();
