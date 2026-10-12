@@ -51,6 +51,18 @@ export class TissueSystem {
     this.softness = Float32Array.from(this.regions, r => SOFTNESS[r] ?? .5);
     this.sex = data.sex;
     this.analFrame = data.analFrame;
+    this.analStretchTarget = new Float32Array(this.rest.length);
+    if (this.analFrame) for (let i = 0; i < this.count; i++) {
+      if (this.regions[i] !== 16) continue;
+      const j = i * 3, frame = this.analFrame;
+      const u = this.rest[j] - frame.anchor[0];
+      const v = (this.rest[j + 1] - frame.anchor[1]) * frame.tangent[1] + (this.rest[j + 2] - frame.anchor[2]) * frame.tangent[2];
+      const r = Math.hypot(u, v); if (r < 1e-6) continue;
+      const amount = .004 * Math.min(1, r / .008) * Math.max(0, 1 - (r / .022) ** 2);
+      this.analStretchTarget[j] = amount * u / r;
+      this.analStretchTarget[j + 1] = amount * v / r * frame.tangent[1];
+      this.analStretchTarget[j + 2] = amount * v / r * frame.tangent[2];
+    }
     this.support = new Float32Array(this.count);
     this.bulge = new Float32Array(this.count);
     this.decay = new Float32Array(this.count);
@@ -78,7 +90,7 @@ export class TissueSystem {
     this.parameters = { stiffness: 45, damping: 0.5, gravity: 0.3, tension: 0, strength: 1, radius: 0.10, region: -1, genitalCompliance: 1, genitalDamping: .5, genitalScale: 1, buttCompliance: 1, buttDamping: .5, buttMuscle: 1, buttFat: 1, buttSide: 0, buttMuscleLeft: 1, buttMuscleRight: 1, buttFatLeft: 1, buttFatRight: 1, lumbarCoupling: .65, lumbarSupport: .35, lumbarDamping: .65, upperCoupling: .65, upperSupport: .25, shoulderCoupling: .65, shoulderSupport: .35, handCoupling: .65, handSupport: .4 };
     this.paused = false;
     Object.assign(this.parameters, { absSupport: .35, obliqueSupport: .45, absCoupling: .65, coreCoupling: .65, coreBracing: 0, absDamping: .6 });
-    Object.assign(this.parameters, { analCompliance: 1, analDamping: .65 });
+    Object.assign(this.parameters, { analCompliance: 1, analDamping: .65, analStretch: 0 });
     this._vibration = false;
     this.sleeping = false; this.quietTime = 0;
     this.grab = null;
@@ -185,7 +197,7 @@ export class TissueSystem {
   configure(values) {
     const ranges = { stiffness: [1, 100], damping: [0, 1], gravity: [0, 2], tension: [0, 1], strength: [0.1, 3], radius: [0.03, 0.25], region: [-1, 13], genitalCompliance: [.5, 2], genitalDamping: [0, 1], genitalScale: [.55, 1.75], buttCompliance: [.5, 2], buttDamping: [0, 1], buttMuscle: [.75, 1.4], buttFat: [.5, 1.75], buttSide: [-1, 2], buttMuscleLeft: [.75, 1.4], buttMuscleRight: [.75, 1.4], buttFatLeft: [.5, 1.75], buttFatRight: [.5, 1.75], lumbarCoupling: [0, 1], lumbarSupport: [0, 1], lumbarDamping: [0, 1], upperCoupling: [0, 1], upperSupport: [0, 1], shoulderCoupling: [0, 1], shoulderSupport: [0, 1], handCoupling: [0, 1], handSupport: [0, 1] };
     ranges.region[1] = this.regions.includes(16) ? 16 : 15;
-    ranges.analCompliance = [.5, 2]; ranges.analDamping = [0, 1];
+    ranges.analCompliance = [.5, 2]; ranges.analDamping = [0, 1]; ranges.analStretch = [0, 1];
     for (const key of ['absSupport', 'obliqueSupport', 'absCoupling', 'coreCoupling', 'coreBracing', 'absDamping']) ranges[key] = [0, 1];
     let changed = false;
     for (const [key, value] of Object.entries(values)) {
@@ -285,7 +297,7 @@ export class TissueSystem {
       const selected = this.selected(i);
       const activation = this.activation?.[i] || 0;
       const k = Math.min(this.support[i] * (1 + activation * 1.5), this.stiffnessCap[i]), bulge = this.bulge[i] + .003 * activation * soft;
-      for (let axis = 0; axis < 3; axis++) f[j + axis] = -k * (d[j + axis] - this.normals[j + axis] * bulge);
+      for (let axis = 0; axis < 3; axis++) f[j + axis] = -k * (d[j + axis] - this.normals[j + axis] * bulge - this.analStretchTarget[j + axis] * this.parameters.analStretch);
       if (this.pose) for (let axis = 0; axis < 3; axis++) f[j + axis] += 9.81 * gravity * soft * this.pose.gravity[j + axis];
       else f[j + 1] -= 9.81 * gravity * soft;
       if (this.vibration && selected) f[j] += oscillation * soft;

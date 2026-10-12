@@ -68,7 +68,7 @@ test('actual map controls capture a displaced sample, cancel, and release on pan
   const skinColors = skinMesh.geometry.attributes.color.array.slice(), buttRoughness = skinMesh.material.roughnessMap;
   assert.ok(skinMesh.material.vertexColors && skinColors.some(v => v !== 1));
   elements.get('skin-buttockTexture').value = '0'; elements.get('skin-buttockTexture').oninput();
-  assert.equal(elements.get('skin-buttockTexture-value').value, '0%'); assert.equal(skinMesh.material.vertexColors, false);
+  assert.equal(elements.get('skin-buttockTexture-value').value, '0%'); assert.equal(skinMesh.material.vertexColors, true);
   assert.notEqual(skinMesh.material.roughnessMap, buttRoughness);
   elements.get('tissue-view').value = 'heat'; elements.get('tissue-view').onchange();
   assert.notDeepEqual(skinMesh.geometry.attributes.color.array, skinColors);
@@ -128,6 +128,7 @@ test('actual map controls capture a displaced sample, cancel, and release on pan
   assert.equal(elements.get('motion-hold').textContent, 'Run muscles');
   // Actual anal-view/shape/response handlers, not just the standalone map.
   elements.get('focus-anal').onclick();
+  assert.equal(elements.get('tissue-view').value, 'skin'); assert.equal(elements.get('anal-controls').open, true);
   assert.equal(elements.get('tissue-region').value, '16');
   assert.equal(elements.get('tissue-mapRegion').value, 'anal');
   elements.get('shape-analSize').value = '1.25'; elements.get('shape-analSize').oninput();
@@ -139,6 +140,12 @@ test('actual map controls capture a displaced sample, cancel, and release on pan
   assert.equal(elements.get('tissue-analDamping-value').value, '90%');
   assert.match(elements.get('buttock-map-status').textContent, /anal tissue/);
   assert.ok(dots.length > 0 && dots.length <= 25);
+  elements.get('tissue-analStretch').value = '1'; elements.get('tissue-analStretch').oninput();
+  assert.equal(elements.get('tissue-analStretch-value').value, '100%');
+  const beforeStretch = skinMesh.geometry.attributes.position.array.slice();
+  for (let f = 0; f < 90; f++) lab.update(1 / 60, 7100 + f * 1000 / 60);
+  assert.notDeepEqual(skinMesh.geometry.attributes.position.array, beforeStretch);
+  elements.get('anal-release').onclick(); assert.equal(elements.get('tissue-analStretch').value, '0'); assert.equal(elements.get('tissue-analStretch-value').value, '0%');
   mapCanvas.emit('pointerdown', { ...event, pointerId: 11, clientX: dots[0].x, clientY: dots[0].y });
   assert.equal(controls.enabled, false);
   mapCanvas.emit('pointerup', { ...event, pointerId: 11 }); assert.equal(controls.enabled, true);

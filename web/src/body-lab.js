@@ -41,7 +41,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
   const buttockMap = new ButtockMap(mapCanvas, $('buttock-map-status'), $('tissue-mapRegion').value);
   const settings = ['stiffness', 'damping', 'gravity', 'tension', 'radius', 'strength', 'genitalCompliance', 'genitalDamping', 'buttCompliance', 'buttDamping', 'lumbarCoupling', 'lumbarSupport', 'lumbarDamping', 'upperCoupling', 'upperSupport', 'shoulderCoupling', 'shoulderSupport', 'handCoupling', 'handSupport'];
   settings.push('absSupport', 'obliqueSupport', 'absCoupling', 'coreCoupling', 'coreBracing', 'absDamping');
-  settings.push('analCompliance', 'analDamping');
+  settings.push('analCompliance', 'analDamping', 'analStretch');
   const parameterValues = () => ({ ...Object.fromEntries(settings.map(id => [id, Number($(`tissue-${id}`).value)])), buttSide: Number($('tissue-buttSide').value) });
   function setButtons() {
     $('tissue-pause').textContent = current?.system.paused ? 'Resume physics' : 'Pause physics';
@@ -216,6 +216,8 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
     const direction = new THREE.Vector3(...current.data.analFrame.normal).transformDirection(current.mesh.matrixWorld).multiplyScalar(.18 * shape.height * current.object.scale.x);
     controls.target.copy(center); camera.position.copy(center).add(direction); camera.lookAt(center); controls.update();
     current.system.configure({ region: 16 }); $('tissue-region').value = '16'; setMapMode('anal');
+    requestRealtime(); current.skin.configure({ finish: 'detailed' }); $('tissue-view').value = 'skin'; applyView(); displaySkin();
+    $('anal-controls').open = true;
     buttockMap.next = 0; setPanel('physics');
   };
   $('focus-buttocks').onclick = () => focusRegion(9, true);
@@ -346,6 +348,7 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
   for (const button of document.querySelectorAll('[data-body]')) button.onclick = () => load(button.dataset.body);
   for (const button of document.querySelectorAll('[data-tissue-tool]')) button.onclick = () => setTool(button.dataset.tissueTool);
   function formatParameter(id, value) {
+    if (id === 'analStretch') return `${Math.round(value * 100)}%`;
     return id === 'radius' ? `${Math.round(value * 100)} cm` : id === 'stiffness' ? String(value) : ['damping', 'tension', 'genitalDamping', 'analDamping', 'buttDamping', 'lumbarCoupling', 'lumbarSupport', 'lumbarDamping', 'upperCoupling', 'upperSupport', 'shoulderCoupling', 'shoulderSupport', 'handCoupling', 'handSupport', 'absSupport', 'obliqueSupport', 'absCoupling', 'coreCoupling', 'coreBracing', 'absDamping'].includes(id) ? `${Math.round(value * 100)}%` : `${value.toFixed(1)}×`;
   }
   for (const id of settings) {
@@ -381,7 +384,8 @@ export function createBodyLab({ renderer, camera, controls, onReady, onMotionVie
     buttockMap.next = 0; resume();
   };
   $('tissue-pause').onclick = () => current?.system.paused ? resume() : pause();
-  $('tissue-reset').onclick = () => { if (current) { endPointer(); current.system.reset(); current.system.vibration = false; setButtons(); updateSurface(true); requestRealtime(); } };
+  $('anal-release').onclick = () => { $('tissue-analStretch').value = '0'; $('tissue-analStretch').oninput(); };
+  $('tissue-reset').onclick = () => { if (current) { endPointer(); current.system.configure({ analStretch: 0 }); $('tissue-analStretch').value = '0'; $('tissue-analStretch-value').value = '0%'; current.system.reset(); current.system.vibration = false; setButtons(); updateSurface(true); requestRealtime(); } };
   $('tissue-impulse').onclick = () => {
     if (current && isSideRegion(current.system.parameters.region) && !current.system.parameters.buttSide && !current.system.lastButtSide) { notify('Touch a side first, or choose a side for the pulse.'); return; }
     resume(); current?.system.impulse();

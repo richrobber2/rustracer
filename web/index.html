@@ -27,7 +27,7 @@
         <fieldset id="creator-fields" disabled><label class="select-label" for="shape-buttSide">Muscle / fat edits · as seen from the rear<select id="shape-buttSide"><option value="Left" selected>Rear-view left</option><option value="Right">Rear-view right</option><option value="Both">Both sides · overwrite both</option></select></label><div id="proportion-controls"></div>
         <p class="hint">Values are relative to the base body. Editing proportions resets tissue to its new resting shape.</p>
         <div class="preset-row"><button id="proportions-reset">Reset shape</button><button id="proportions-random">Randomize</button><button id="focus-pelvis">Focus pelvis</button><button id="focus-buttocks">Rear view</button></div>
-        <button id="focus-anal" class="wide quiet">Anal view & physics</button>
+        <button id="focus-anal" class="wide quiet">Anus view & stretch</button>
         <button id="focus-upper" class="wide quiet">Upper-back view</button>
         <button id="focus-abs" class="wide quiet">Abs view & physics</button>
         <p class="hint">Muscle bulk and fat padding edit the selected side independently. Both sides overwrites both values. They are separate shape and support approximations, relative to this base. Internal tissue layers and mass are not measured.</p>
@@ -97,10 +97,12 @@
           <label class="slider-label" for="tissue-genitalCompliance">Compliance <output id="tissue-genitalCompliance-value">1.0×</output></label><input id="tissue-genitalCompliance" type="range" min="0.5" max="2" step="0.05" value="1">
           <label class="slider-label" for="tissue-genitalDamping">Damping <output id="tissue-genitalDamping-value">50%</output></label><input id="tissue-genitalDamping" type="range" min="0" max="1" step="0.05" value="0.5">
           <p class="hint">External tissue with a supported attachment. Proportions also change its response and movement limit.</p></details>
-          <details class="genital-controls"><summary>Anal / perianal tissue response</summary>
+          <details id="anal-controls" class="genital-controls"><summary>Anus / perianal tissue response</summary>
+          <label class="slider-label" for="tissue-analStretch">Ring stretch <output id="tissue-analStretch-value">0%</output></label><input id="tissue-analStretch" type="range" min="0" max="1" step="0.05" value="0">
+          <button id="anal-release" class="wide quiet">Release stretch</button>
           <label class="slider-label" for="tissue-analCompliance">Compliance <output id="tissue-analCompliance-value">1.0×</output></label><input id="tissue-analCompliance" type="range" min="0.5" max="2" step="0.05" value="1">
           <label class="slider-label" for="tissue-analDamping">Damping <output id="tissue-analDamping-value">65%</output></label><input id="tissue-analDamping" type="range" min="0" max="1" step="0.05" value="0.65">
-          <p class="hint">A recessed external anal surface with surrounding folds. The central region uses its own press/pull response and a 6 mm movement limit. Size and depth are under Create. This is a closed surface approximation without an internal canal or sphincter muscle model.</p></details>
+          <p class="hint">Ring stretch pulls the surrounding surface outward; Release stretch lets it recover. Press or pull dots in the anal map for local movement. The region has a 6 mm movement limit. Size and depth are under Create. This is a closed external surface without an internal canal or sphincter muscle model.</p></details>
           <section class="buttock-map-panel" aria-labelledby="buttock-map-title">
           <h3 id="buttock-map-title">2D displacement & grab points</h3>
           <label class="select-label" for="tissue-mapRegion">Map region<select id="tissue-mapRegion"><option value="abs">Abs & obliques · front</option><option value="upper" selected>Upper back → shoulders → hands</option><option value="pelvis">Buttocks & lower back</option><option value="anal">Anal / perianal surface</option></select></label>

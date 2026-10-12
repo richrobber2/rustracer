@@ -41,11 +41,12 @@ for (const sex of ['female', 'male']) {
     const seams = new Map(); let left = 0, right = 0, neutral = 0;
     for (let i = 0; i < a.position.count; i++) {
       const rgb = Array.from(colors.slice(i * 3, i * 3 + 3)), point = base.slice(i * 3, i * 3 + 3);
-      assert.ok(rgb.every(v => Number.isFinite(v) && v > .96 && v < 1.03));
+      const anal = a._anal_weight.getX(i) > 0;
+      assert.ok(rgb.every(v => Number.isFinite(v) && v > (anal ? .65 : .96) && v < 1.03));
       if (b.weights[i] > .001) {
         assert.ok(point[2] < 0 && point[1] / data.height > .405 && point[1] / data.height < .585);
         if (point[0] < 0) left++; else right++;
-      } else if (b.weights[i] === 0) { assert.deepEqual(rgb, [1, 1, 1]); neutral++; }
+      } else if (b.weights[i] === 0 && !anal) { assert.deepEqual(rgb, [1, 1, 1]); neutral++; }
       const id = a._weld_index.getX(i);
       if (seams.has(id)) assert.deepEqual(rgb, seams.get(id), `Tint breaks welded seam ${id}`);
       else seams.set(id, rgb);
@@ -62,7 +63,8 @@ for (const sex of ['female', 'male']) {
     assert.notDeepEqual(a.color.array, colors); assert.equal(skin.material.roughnessMap, null);
     skin.setView('skin'); assert.deepEqual(a.color.array, colors); assert.ok(skin.material.vertexColors);
     skin.configure({ finish: 'original' }); assert.equal(skin.material.vertexColors, false); assert.equal(skin.material.roughnessMap, null);
-    skin.configure({ finish: 'detailed', buttockTexture: 0 }); assert.equal(skin.material.roughnessMap, skin.maps.roughness); assert.equal(skin.material.vertexColors, false);
+    skin.configure({ finish: 'detailed', buttockTexture: 0 }); assert.equal(skin.material.roughnessMap, skin.maps.roughness); assert.equal(skin.material.vertexColors, true);
+    assert.ok(b.hasAnalDetail && a.color.array.some(v => v < .85), 'The anal recess must remain visible with buttock tint off');
     skin.configure(DEFAULT_SKIN); assert.deepEqual(a.color.array, colors);
     let disposed = 0; b.roughness.addEventListener('dispose', () => disposed++);
     skin.setView('clay'); skin.dispose(); assert.equal(disposed, 1);

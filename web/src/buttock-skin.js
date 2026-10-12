@@ -89,11 +89,20 @@ export class ButtockSkin {
     this.geometry = geometry;
     const { position, _genital_weight: genital, _anal_weight: anal, _weld_index: weld } = geometry.attributes;
     this.tint = new Float32Array(position.count * 3); this.weights = new Float32Array(position.count);
+    this.analTint = new Float32Array(this.tint.length); this.hasAnalDetail = false;
     const matte = new Float32Array(position.count), fields = new Map();
     for (let i = 0; i < position.count; i++) {
       const id = weld?.getX(i) ?? i;
       if (!fields.has(id)) fields.set(id, buttockSkinField([position.getX(i), position.getY(i), position.getZ(i)], data.height, Math.max(genital?.getX(i) || 0, anal?.getX(i) || 0)));
       const field = fields.get(id); this.weights[i] = field.weight; matte[i] = field.matte; this.tint.set(field.tint, i * 3);
+      if (anal?.getX(i) > 0 && data.analFrame) {
+        const frame = data.analFrame, u = position.getX(i) - frame.anchor[0];
+        const v = (position.getY(i) - frame.anchor[1]) * frame.tangent[1] + (position.getZ(i) - frame.anchor[2]) * frame.tangent[2];
+        const r = Math.hypot(u, v), weight = anal.getX(i);
+        const center = .28 * Math.exp(-((r / .0045) ** 2)) * weight;
+        const rim = .07 * bell(r, .008, .0035) * weight;
+        this.analTint.set([-center - rim * .75, -center - rim, -center - rim * 1.1], i * 3); this.hasAnalDetail = true;
+      }
     }
     const baked = bakeRoughness(geometry, matte, sourceRoughness);
     this.roughness = baked.texture; this.base = baked.base; this.delta = baked.delta; this.amount = -1;
@@ -110,7 +119,7 @@ export class ButtockSkin {
     // Heat uses this same attribute. Restore the skin colors on every return.
     const colors = this.geometry.attributes.color;
     if (colors) {
-      for (let i = 0; i < this.tint.length; i++) colors.array[i] = 1 + this.tint[i] * amount;
+      for (let i = 0; i < this.tint.length; i++) colors.array[i] = 1 + this.tint[i] * amount + this.analTint[i];
       colors.needsUpdate = true;
     }
   }

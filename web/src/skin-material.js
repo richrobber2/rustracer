@@ -77,6 +77,7 @@ export class SkinAppearance {
     const m = this.material, p = this.settings;
     const skin = this.view === 'skin', detailed = skin && p.finish === 'detailed';
     const buttocks = detailed && p.buttockTexture > 0 && this.buttocks;
+    const localSkin = detailed && this.buttocks && (buttocks || this.buttocks.hasAnalDetail);
     const hasNormal = Boolean(m.normalMap), hasRoughness = Boolean(m.roughnessMap), wasSkin = Boolean(m.map);
     const hadColors = m.vertexColors, wasWire = m.wireframe;
     m.map = skin ? (detailed && this.cleanMap ? this.cleanMap : this.sourceMap) : null;
@@ -86,8 +87,8 @@ export class SkinAppearance {
     m.roughness = detailed ? p.roughness : this.sourceRoughness;
     m.ior = detailed ? 1.4 : 1.5; m.specularIntensity = 1;
     m.color.set(skin || this.view === 'heat' ? '#ffffff' : '#bca58a');
-    m.vertexColors = this.view === 'heat' || Boolean(buttocks); m.wireframe = this.view === 'wire';
-    if (buttocks) this.buttocks.apply(p.buttockTexture);
+    m.vertexColors = this.view === 'heat' || Boolean(localSkin); m.wireframe = this.view === 'wire';
+    if (localSkin) this.buttocks.apply(p.buttockTexture);
     if (hasNormal !== Boolean(m.normalMap) || hasRoughness !== Boolean(m.roughnessMap) || wasSkin !== Boolean(m.map) || hadColors !== m.vertexColors || wasWire !== m.wireframe) m.needsUpdate = true;
   }
   // Maps can be temporarily removed in clay/heat/wire, so their owner disposes

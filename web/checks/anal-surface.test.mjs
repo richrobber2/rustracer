@@ -26,6 +26,23 @@ async function body(sex) {
   return { object: gltf.scene, mesh, data, source, system, original, oldFaces };
 }
 for (const sex of ['female', 'male']) {
+  test(`${sex} ring stretch expands locally, respects pause and limits, and recovers on release`, async () => {
+    const { system } = await body(sex);
+    system.configure({ gravity: 0, analStretch: 1 });
+    assert.equal(system.parameters.analStretch, 1);
+    for (let i = 0; i < system.count; i++) if (system.regions[i] !== ANAL_REGION) assert.deepEqual(Array.from(system.analStretchTarget.slice(i * 3, i * 3 + 3)), [0, 0, 0]);
+    system.paused = true; system.step(1 / 60); assert.ok(system.offset.every(v => v === 0));
+    system.paused = false; for (let f = 0; f < 240; f++) system.step(1 / 60);
+    let radial = 0;
+    for (let i = 0; i < system.count; i++) {
+      const j = i * 3, target = system.analStretchTarget.slice(j, j + 3), length = Math.hypot(...target);
+      assert.ok(Math.hypot(...system.offset.slice(j, j + 3)) <= system.limits[i] + 1e-6);
+      if (length > .002) radial = Math.max(radial, target.reduce((sum, v, k) => sum + v * system.offset[j + k], 0) / length);
+    }
+    assert.ok(radial > .001, `Ring did not expand: ${radial}`);
+    system.configure({ analStretch: 0 }); for (let f = 0; f < 480; f++) system.step(1 / 60);
+    assert.ok(system.sleeping && system.maxDisplacement < .0001);
+  });
   test(`${sex} anal surface is welded, local, closed and bound to the skeleton`, async () => {
     const { mesh, data, source, original, oldFaces, object, system } = await body(sex), g = mesh.geometry;
     assert.ok(g.index.count > oldFaces && g.index.count < oldFaces * 1.03);
